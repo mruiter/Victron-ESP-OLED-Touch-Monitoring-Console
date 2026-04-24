@@ -1726,12 +1726,78 @@ void ProcessTap(int16_t tx, int16_t ty)
   }
 }
 
+bool ProcessSwipe(int16_t deltaX, int16_t deltaY)
+{
+  const int16_t minSwipeDistance = 70;
+  int16_t absX = abs(deltaX);
+  int16_t absY = abs(deltaY);
+
+  if (absX < minSwipeDistance || absX <= absY)
+    return false;
+
+  if (millis() - lastTouchAccepted < GENERAL_SETTINGS_TOUCH_COOLDOWN_MS)
+    return true;
+
+  lastTouchAccepted = millis();
+
+  if (!theDisplayIsCurrentlyOn)
+  {
+    if (GENERAL_SETTINGS_WAKE_DISPLAY_ON_TOUCH)
+    {
+      SetTheDisplayOn(true);
+      SetKeepDisplayOnTimeOut(GENERAL_SETTINGS_DISPLAY_TIMEOUT_MINUTEN);
+    }
+    return true;
+  }
+
+  if (dialogState == DIALOG_CONFIRM)
+    return true;
+
+  ResetKeepDisplayOnStartTime();
+
+  Page visiblePages[3];
+  int pageCount = 0;
+  visiblePages[pageCount++] = PAGE_OVERVIEW;
+  if (GENERAL_SETTINGS_TOON_DETAIL_PAGINA)
+    visiblePages[pageCount++] = PAGE_DETAIL;
+  if (GENERAL_SETTINGS_TOON_SYSTEEM_PAGINA)
+    visiblePages[pageCount++] = PAGE_SYSTEM;
+
+  if (pageCount <= 1)
+    return true;
+
+  int currentIndex = 0;
+  for (int i = 0; i < pageCount; ++i)
+  {
+    if (visiblePages[i] == currentPage)
+    {
+      currentIndex = i;
+      break;
+    }
+  }
+
+  bool swipeLeft = deltaX < 0;
+  int nextIndex = swipeLeft
+                    ? (currentIndex + 1) % pageCount
+                    : (currentIndex + pageCount - 1) % pageCount;
+
+  if (nextIndex != currentIndex)
+  {
+    currentPage = visiblePages[nextIndex];
+    displayDirty = true;
+  }
+
+  return true;
+}
+
 void CheckTouch()
 {
   if (!boardHasTouch || !GENERAL_SETTINGS_USE_TOUCH_DISPLAY)
     return;
 
   static bool touchLatched = false;
+  static int16_t touchStartX = 0;
+  static int16_t touchStartY = 0;
   static int16_t lastTx = 0;
   static int16_t lastTy = 0;
 
@@ -1741,12 +1807,22 @@ void CheckTouch()
 
   if (touched)
   {
+    if (!touchLatched)
+    {
+      touchStartX = tx;
+      touchStartY = ty;
+    }
     lastTx = tx;
     lastTy = ty;
   }
 
   if (!touched && touchLatched)
-    ProcessTap(lastTx, lastTy);
+  {
+    int16_t deltaX = lastTx - touchStartX;
+    int16_t deltaY = lastTy - touchStartY;
+    if (!ProcessSwipe(deltaX, deltaY))
+      ProcessTap(lastTx, lastTy);
+  }
 
   touchLatched = touched;
 }
