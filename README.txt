@@ -35,3 +35,18 @@ Installatie:
 
 Let op:
 Deze build is statisch en logisch gecontroleerd, maar niet op echte hardware gecompileerd of geflasht in deze omgeving.
+
+Snelle codegids (voor makkelijk terugvinden):
+- `ESP32RemoteForVictron_Touch_NL_Dashboard_V4.ino`
+  - Bovenin: globale status, app metadata, touchboxen en pagina-state.
+  - Utility helpers: formatting, animatiehulpen, kleurenmix, touchbox checks.
+  - Data-laag: MQTT discovery + topic subscriptions + parsing van Victron berichten.
+  - UI-laag: tekenfuncties voor statusbalk, overzicht/detail/systeem pagina, dialogs en toasts.
+  - Input-laag: fysieke knoppen, touch processing, toggle flow voor lader/omvormer.
+  - Runtime-laag: setup(), loop(), sampling van history, display refresh en timeout-logica.
+- `general_settings.h`
+  - Alle functionele toggles en UX/performance instellingen (animatie, touch, timeout, layout).
+- `secret_settings.h`
+  - WiFi, MQTT en Victron IDs (lokaal invullen, niet committen met echte secrets).
+- `boot_animation.h`
+  - Opstartanimatie en visuele onboarding.
