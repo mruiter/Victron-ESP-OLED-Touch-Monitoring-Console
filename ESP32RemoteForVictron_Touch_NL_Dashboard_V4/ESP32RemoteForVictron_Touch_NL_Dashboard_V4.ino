@@ -28,6 +28,9 @@ LilyGo_Class amoled;
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite sprite = TFT_eSprite(&tft);
 
+const size_t FRAMEBUFFER_PIXELS = (size_t)TFT_WIDTH * (size_t)TFT_HEIGHT;
+const size_t FRAMEBUFFER_BYTES = FRAMEBUFFER_PIXELS * sizeof(uint16_t);
+
 EspMQTTClient client(
     SECRET_SETTINGS_WIFI_SSID,
     SECRET_SETTINGS_WIFI_PASSWORD,
@@ -224,6 +227,13 @@ bool displayDirty = true;
 unsigned long lastStatusSecondRendered = 0UL;
 bool statusSecondInitialized = false;
 
+uint16_t *swipeFromFrame = nullptr;
+uint16_t *swipeToFrame = nullptr;
+bool swipeAnimationAvailable = false;
+bool swipeTransitionPending = false;
+int swipeTransitionDirection = 0;
+unsigned long swipeTransitionDurationMs = 220UL;
+
 // -----------------------------------------------------------------------------
 // Utility helpers
 // -----------------------------------------------------------------------------
@@ -262,6 +272,75 @@ String ChargingStateFromCode(int stateCode)
 void RefreshDisplay()
 {
   amoled.pushColors(0, 0, TFT_WIDTH, TFT_HEIGHT, (uint16_t *)sprite.getPointer());
+}
+
+void BlitFrameShifted(const uint16_t *src, uint16_t *dst, int shiftX)
+{
+  if (src == nullptr || dst == nullptr)
+    return;
+
+  int srcX = max(0, -shiftX);
+  int dstX = max(0, shiftX);
+  int copyWidth = TFT_WIDTH - abs(shiftX);
+  if (copyWidth <= 0)
+    return;
+
+  for (int y = 0; y < TFT_HEIGHT; ++y)
+  {
+    const uint16_t *srcRow = src + (size_t)y * TFT_WIDTH;
+    uint16_t *dstRow = dst + (size_t)y * TFT_WIDTH;
+    memcpy(dstRow + dstX, srcRow + srcX, (size_t)copyWidth * sizeof(uint16_t));
+  }
+}
+
+void PrepareSwipeTransition(bool swipeLeft, unsigned long gestureDurationMs)
+{
+  uint16_t *screenFrame = (uint16_t *)sprite.getPointer();
+  if (!swipeAnimationAvailable || screenFrame == nullptr)
+    return;
+
+  memcpy(swipeFromFrame, screenFrame, FRAMEBUFFER_BYTES);
+  swipeTransitionPending = true;
+  swipeTransitionDirection = swipeLeft ? -1 : 1;
+
+  float pxPerMs = (float)TFT_WIDTH / max(1UL, gestureDurationMs);
+  float speedFactor = constrain(pxPerMs / 2.0F, 0.35F, 1.8F);
+  swipeTransitionDurationMs = (unsigned long)constrain((int)(260.0F / speedFactor), 120, 320);
+}
+
+void AnimateSwipeTransitionIfNeeded()
+{
+  if (!swipeTransitionPending)
+    return;
+
+  uint16_t *screenFrame = (uint16_t *)sprite.getPointer();
+  if (!swipeAnimationAvailable || screenFrame == nullptr)
+  {
+    swipeTransitionPending = false;
+    return;
+  }
+
+  memcpy(swipeToFrame, screenFrame, FRAMEBUFFER_BYTES);
+
+  const unsigned long frameMs = 16UL;
+  int frames = max(6, (int)(swipeTransitionDurationMs / frameMs));
+  int incomingStartShift = (swipeTransitionDirection < 0) ? TFT_WIDTH : -TFT_WIDTH;
+
+  for (int i = 1; i <= frames; ++i)
+  {
+    int progress = ((long)TFT_WIDTH * i) / frames;
+    int oldShift = swipeTransitionDirection * progress;
+    int newShift = oldShift + incomingStartShift;
+
+    memset(screenFrame, 0, FRAMEBUFFER_BYTES);
+    BlitFrameShifted(swipeFromFrame, screenFrame, oldShift);
+    BlitFrameShifted(swipeToFrame, screenFrame, newShift);
+    RefreshDisplay();
+    delay(frameMs);
+  }
+
+  memcpy(screenFrame, swipeToFrame, FRAMEBUFFER_BYTES);
+  swipeTransitionPending = false;
 }
 
 void ResetKeepDisplayOnStartTime()
@@ -1545,6 +1624,7 @@ void UpdateDisplay()
 
   DrawDialog();
   DrawToast();
+  AnimateSwipeTransitionIfNeeded();
   RefreshDisplay();
 }
 
@@ -1726,7 +1806,7 @@ void ProcessTap(int16_t tx, int16_t ty)
   }
 }
 
-bool ProcessSwipe(int16_t deltaX, int16_t deltaY)
+bool ProcessSwipe(int16_t deltaX, int16_t deltaY, unsigned long gestureDurationMs)
 {
   const int16_t minSwipeDistance = 70;
   int16_t absX = abs(deltaX);
@@ -1783,6 +1863,7 @@ bool ProcessSwipe(int16_t deltaX, int16_t deltaY)
 
   if (nextIndex != currentIndex)
   {
+    PrepareSwipeTransition(swipeLeft, gestureDurationMs);
     currentPage = visiblePages[nextIndex];
     displayDirty = true;
   }
@@ -1800,6 +1881,7 @@ void CheckTouch()
   static int16_t touchStartY = 0;
   static int16_t lastTx = 0;
   static int16_t lastTy = 0;
+  static unsigned long touchStartMs = 0UL;
 
   int16_t tx = 0;
   int16_t ty = 0;
@@ -1811,6 +1893,7 @@ void CheckTouch()
     {
       touchStartX = tx;
       touchStartY = ty;
+      touchStartMs = millis();
     }
     lastTx = tx;
     lastTy = ty;
@@ -1820,7 +1903,8 @@ void CheckTouch()
   {
     int16_t deltaX = lastTx - touchStartX;
     int16_t deltaY = lastTy - touchStartY;
-    if (!ProcessSwipe(deltaX, deltaY))
+    unsigned long gestureDurationMs = millis() - touchStartMs;
+    if (!ProcessSwipe(deltaX, deltaY, gestureDurationMs))
       ProcessTap(lastTx, lastTy);
   }
 
@@ -1846,6 +1930,20 @@ void SetupDisplay()
 {
   sprite.createSprite(TFT_WIDTH, TFT_HEIGHT);
   sprite.setSwapBytes(true);
+
+  swipeFromFrame = (uint16_t *)malloc(FRAMEBUFFER_BYTES);
+  swipeToFrame = (uint16_t *)malloc(FRAMEBUFFER_BYTES);
+  swipeAnimationAvailable = (swipeFromFrame != nullptr && swipeToFrame != nullptr);
+  if (!swipeAnimationAvailable)
+  {
+    if (swipeFromFrame != nullptr)
+      free(swipeFromFrame);
+    if (swipeToFrame != nullptr)
+      free(swipeToFrame);
+    swipeFromFrame = nullptr;
+    swipeToFrame = nullptr;
+    DebugPrint("Swipe anim buffers unavailable, fallback to instant page switch");
+  }
 
   bool ok = amoled.beginAMOLED_191(true);
   if (!ok)
