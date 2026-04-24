@@ -735,9 +735,20 @@ void PublishKeepAlive(bool force = false)
   }
 }
 
+bool HasInternetConnection()
+{
+  if (!client.isWifiConnected() || WiFi.status() != WL_CONNECTED)
+    return false;
+
+  IPAddress resolvedIP;
+  if (WiFi.hostByName(GENERAL_SETTINGS_NTP_SERVER_1, resolvedIP) == 1)
+    return true;
+  return WiFi.hostByName(GENERAL_SETTINGS_NTP_SERVER_2, resolvedIP) == 1;
+}
+
 void SyncTimeIfNeeded()
 {
-  if (!client.isWifiConnected())
+  if (!HasInternetConnection())
     return;
 
   if (timeConfigured && millis() - lastTimeSyncAttempt < 12UL * 60UL * 60UL * 1000UL)
@@ -1745,6 +1756,9 @@ void onConnectionEstablished()
   subscriptionsReady = false;
   solarStateSubscribed = false;
   displayDirty = true;
+  timeConfigured = false;
+  lastTimeSyncAttempt = 0UL;
+  SyncTimeIfNeeded();
   if (VictronInstallationID != "+")
     installationDiscovered = true;
   if (MultiplusThreeDigitID != "+")
