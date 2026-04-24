@@ -527,19 +527,36 @@ void DrawMetricCard(int x, int y, int w, int h, const String &title, const Strin
   sprite.drawString(value, x + 10, y + 28);
 }
 
+void DrawFlowChevron(int cx, int cy, float angle, uint16_t color, int size = 5)
+{
+  int tipX = cx + (int)roundf(cosf(angle) * size);
+  int tipY = cy + (int)roundf(sinf(angle) * size);
+  int leftX = cx + (int)roundf(cosf(angle + 2.55F) * (size - 2));
+  int leftY = cy + (int)roundf(sinf(angle + 2.55F) * (size - 2));
+  int rightX = cx + (int)roundf(cosf(angle - 2.55F) * (size - 2));
+  int rightY = cy + (int)roundf(sinf(angle - 2.55F) * (size - 2));
+  sprite.fillTriangle(tipX, tipY, leftX, leftY, rightX, rightY, color);
+}
+
 void DrawFlowPath(int x1, int y1, int x2, int y2, uint16_t color, float intensity, bool reverse = false)
 {
   uint16_t pathColor = BlendColor565(TFT_DARKGREY, color, intensity);
   sprite.drawLine(x1, y1, x2, y2, pathColor);
   if (intensity < 0.2F || !GENERAL_SETTINGS_ENABLE_FLOW_ANIMATIE) return;
-  float phase = PulseFactor(1200UL);
-  for (int i = 0; i < 3; i++)
+  float phase = PulseFactor(950UL);
+  float dx = (float)(x2 - x1);
+  float dy = (float)(y2 - y1);
+  float angle = atan2f(dy, dx);
+  if (reverse)
+    angle += PI;
+  for (int i = 0; i < 4; i++)
   {
-    float t = fmodf(phase + (float)i / 3.0F, 1.0F);
+    float t = fmodf(phase + (float)i / 4.0F, 1.0F);
     if (reverse) t = 1.0F - t;
-    int dx = x1 + (int)round((x2 - x1) * t);
-    int dy = y1 + (int)round((y2 - y1) * t);
-    sprite.fillCircle(dx, dy, 2, BlendColor565(color, TFT_WHITE, 0.45F));
+    int px = x1 + (int)roundf(dx * t);
+    int py = y1 + (int)roundf(dy * t);
+    uint16_t chevronColor = BlendColor565(color, TFT_WHITE, 0.30F + ((float)i * 0.12F));
+    DrawFlowChevron(px, py, angle, chevronColor, 5);
   }
 }
 
