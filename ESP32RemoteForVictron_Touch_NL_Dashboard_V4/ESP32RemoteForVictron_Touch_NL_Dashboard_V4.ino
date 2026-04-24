@@ -9,6 +9,7 @@
 #include <LilyGo_AMOLED.h>
 #include <TFT_eSPI.h>
 #include <math.h>
+#include <string.h>
 #include "boot_animation.h"
 #include "language.h"
 
@@ -233,6 +234,10 @@ bool swipeAnimationAvailable = false;
 bool swipeTransitionPending = false;
 int swipeTransitionDirection = 0;
 unsigned long swipeTransitionDurationMs = 220UL;
+uint16_t *bootFadeFromFrame = nullptr;
+uint16_t *bootFadeToFrame = nullptr;
+bool bootFadeTransitionPending = false;
+unsigned long bootFadeTransitionDurationMs = 420UL;
 
 // -----------------------------------------------------------------------------
 // Utility helpers
@@ -272,6 +277,52 @@ String ChargingStateFromCode(int stateCode)
 void RefreshDisplay()
 {
   amoled.pushColors(0, 0, TFT_WIDTH, TFT_HEIGHT, (uint16_t *)sprite.getPointer());
+}
+
+void QueueBootCrossfadeFromCurrentFrame()
+{
+  if (bootFadeFromFrame == nullptr)
+    return;
+
+  memcpy(bootFadeFromFrame, (uint16_t *)sprite.getPointer(), FRAMEBUFFER_BYTES);
+  bootFadeTransitionPending = true;
+}
+
+void AnimateBootTransitionIfNeeded()
+{
+  if (!bootFadeTransitionPending)
+  {
+    RefreshDisplay();
+    return;
+  }
+
+  if (bootFadeFromFrame == nullptr || bootFadeToFrame == nullptr)
+  {
+    bootFadeTransitionPending = false;
+    RefreshDisplay();
+    return;
+  }
+
+  memcpy(bootFadeToFrame, (uint16_t *)sprite.getPointer(), FRAMEBUFFER_BYTES);
+
+  uint16_t *blendTarget = (uint16_t *)sprite.getPointer();
+  const int steps = 12;
+  unsigned long frameDelay = bootFadeTransitionDurationMs / (unsigned long)steps;
+
+  for (int step = 0; step <= steps; ++step)
+  {
+    float ratio = (float)step / (float)steps;
+    for (size_t i = 0; i < FRAMEBUFFER_PIXELS; ++i)
+      blendTarget[i] = BootBlend565(bootFadeFromFrame[i], bootFadeToFrame[i], ratio);
+
+    RefreshDisplay();
+    client.loop();
+    yield();
+    if (step < steps && frameDelay > 0UL)
+      delay(frameDelay);
+  }
+
+  bootFadeTransitionPending = false;
 }
 
 void BlitFrameShifted(const uint16_t *src, uint16_t *dst, int shiftX)
@@ -1625,7 +1676,7 @@ void UpdateDisplay()
   DrawDialog();
   DrawToast();
   AnimateSwipeTransitionIfNeeded();
-  RefreshDisplay();
+  AnimateBootTransitionIfNeeded();
 }
 
 void HandleButtonAction(multiplusFunction option)
@@ -1933,7 +1984,19 @@ void SetupDisplay()
 
   swipeFromFrame = (uint16_t *)malloc(FRAMEBUFFER_BYTES);
   swipeToFrame = (uint16_t *)malloc(FRAMEBUFFER_BYTES);
+  bootFadeFromFrame = (uint16_t *)malloc(FRAMEBUFFER_BYTES);
+  bootFadeToFrame = (uint16_t *)malloc(FRAMEBUFFER_BYTES);
   swipeAnimationAvailable = (swipeFromFrame != nullptr && swipeToFrame != nullptr);
+  if (bootFadeFromFrame == nullptr || bootFadeToFrame == nullptr)
+  {
+    if (bootFadeFromFrame != nullptr)
+      free(bootFadeFromFrame);
+    if (bootFadeToFrame != nullptr)
+      free(bootFadeToFrame);
+    bootFadeFromFrame = nullptr;
+    bootFadeToFrame = nullptr;
+    DebugPrint("Boot fade buffers unavailable, fallback to instant transition");
+  }
   if (!swipeAnimationAvailable)
   {
     if (swipeFromFrame != nullptr)
