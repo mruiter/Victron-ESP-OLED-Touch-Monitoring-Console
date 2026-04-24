@@ -46,8 +46,16 @@
 // 2 = laadstatus
 // 4 = accuvermogen
 
-#define GENERAL_SETTINGS_TIMEZONE                                       "CET-1CEST,M3.5.0,M10.5.0/3"
-#define GENERAL_SETTINGS_NTP_SERVER_1                                  "pool.ntp.org"
+#define GENERAL_SETTINGS_USE_DAYLIGHT_SAVING                            true
+// Default timezone: Europe/Amsterdam. Replace these strings if you want a different timezone.
+#define GENERAL_SETTINGS_TIMEZONE_WITH_DST                              "CET-1CEST,M3.5.0/2,M10.5.0/3"  // Europe/Amsterdam (DST on)
+#define GENERAL_SETTINGS_TIMEZONE_WITHOUT_DST                           "CET-1"                          // Europe/Amsterdam (DST off)
+#if GENERAL_SETTINGS_USE_DAYLIGHT_SAVING
+#define GENERAL_SETTINGS_TIMEZONE                                       GENERAL_SETTINGS_TIMEZONE_WITH_DST
+#else
+#define GENERAL_SETTINGS_TIMEZONE                                       GENERAL_SETTINGS_TIMEZONE_WITHOUT_DST
+#endif
+#define GENERAL_SETTINGS_NTP_SERVER_1                                  "nl.pool.ntp.org"
 #define GENERAL_SETTINGS_NTP_SERVER_2                                  "europe.pool.ntp.org"
 #define GENERAL_SETTINGS_DAG_BRIGHTNESS                                180
 #define GENERAL_SETTINGS_NACHT_BRIGHTNESS                              40
