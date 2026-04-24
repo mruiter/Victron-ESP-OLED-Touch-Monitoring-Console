@@ -384,6 +384,34 @@ float SmoothTowards(float current, float target, float factor = 0.18F)
   return current + (target - current) * factor;
 }
 
+float ClampFloat(float value, float minValue, float maxValue)
+{
+  if (value < minValue) return minValue;
+  if (value > maxValue) return maxValue;
+  return value;
+}
+
+float AnimatieFactorSchaal()
+{
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID <= 1) return 0.65F;
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID >= 3) return 1.45F;
+  return 1.0F;
+}
+
+unsigned long AnimatieFrameIntervalMs()
+{
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID <= 1) return 180UL;
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID >= 3) return 80UL;
+  return 120UL;
+}
+
+String AnimatieSnelheidLabel()
+{
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID <= 1) return "langzaam";
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID >= 3) return "snel";
+  return "normaal";
+}
+
 uint16_t BlendColor565(uint16_t c1, uint16_t c2, float ratio)
 {
   if (ratio <= 0.0F) return c1;
@@ -406,12 +434,13 @@ bool UpdateAnimatedValues()
   bool changed = false;
   float totalGridWatts = gridInL1Watts + gridInL2Watts + gridInL3Watts;
   float totalLoadWatts = ACOutL1Watts + ACOutL2Watts + ACOutL3Watts;
-  float nextGrid = SmoothTowards(dispGridWatts, totalGridWatts);
-  float nextSolar = SmoothTowards(dispSolarWatts, solarWatts);
-  float nextSoc = SmoothTowards(dispBatterySOC, batterySOC, 0.12F);
-  float nextBatteryPower = SmoothTowards(dispBatteryPower, batteryPower);
-  float nextLoad = SmoothTowards(dispACLoadWatts, totalLoadWatts);
-  float nextTTG = SmoothTowards(dispBatteryTTG, batteryTTG, 0.08F);
+  float scale = AnimatieFactorSchaal();
+  float nextGrid = SmoothTowards(dispGridWatts, totalGridWatts, ClampFloat(0.18F * scale, 0.02F, 0.55F));
+  float nextSolar = SmoothTowards(dispSolarWatts, solarWatts, ClampFloat(0.18F * scale, 0.02F, 0.55F));
+  float nextSoc = SmoothTowards(dispBatterySOC, batterySOC, ClampFloat(0.12F * scale, 0.02F, 0.45F));
+  float nextBatteryPower = SmoothTowards(dispBatteryPower, batteryPower, ClampFloat(0.18F * scale, 0.02F, 0.55F));
+  float nextLoad = SmoothTowards(dispACLoadWatts, totalLoadWatts, ClampFloat(0.18F * scale, 0.02F, 0.55F));
+  float nextTTG = SmoothTowards(dispBatteryTTG, batteryTTG, ClampFloat(0.08F * scale, 0.02F, 0.35F));
 
   changed = changed || fabsf(nextGrid - dispGridWatts) > 0.25F;
   changed = changed || fabsf(nextSolar - dispSolarWatts) > 0.25F;
@@ -1302,6 +1331,7 @@ void DrawSystemPage()
   sprite.drawString(String("Touch slot: ") + (touchLocked ? "AAN" : "UIT"), 8, y); y += line;
   sprite.drawString(String("Direct schakelen: ") + (GENERAL_SETTINGS_DIRECT_SCHAKELEN ? "ja" : "nee"), 8, y); y += line;
   sprite.drawString(String("Bevestiging popup: ") + (GENERAL_SETTINGS_TOON_BEVESTIGING_POPUP ? "ja" : "nee"), 8, y); y += line;
+  sprite.drawString("Animatiesnelheid: " + AnimatieSnelheidLabel(), 8, y); y += line;
   sprite.drawString("Brightness modus: " + BrightnessModeLabel(), 8, y); y += line;
   sprite.drawString(String("Nachtthema: ") + (nightThemeActive ? "AAN" : "UIT"), 8, y); y += line;
   sprite.drawString("Helderheid: " + String(currentBrightness), 8, y); y += line;
@@ -1365,7 +1395,7 @@ void UpdateDisplay()
   bool dialogVisible = (dialogState == DIALOG_CONFIRM);
   bool pendingVisible = pendingAction;
   bool animationActive = (GENERAL_SETTINGS_ENABLE_FLOW_ANIMATIE && currentPage == PAGE_OVERVIEW) || touchFeedbackActive || dialogVisible || pendingVisible || toastActive;
-  unsigned long minIntervalMs = animationActive ? 120UL : (unsigned long)GENERAL_SETTINGS_SECONDS_BETWEEN_DISPLAY_UPDATES * 1000UL;
+  unsigned long minIntervalMs = animationActive ? AnimatieFrameIntervalMs() : (unsigned long)GENERAL_SETTINGS_SECONDS_BETWEEN_DISPLAY_UPDATES * 1000UL;
   if (!displayDirty && !statusSecondChanged)
     return;
 
