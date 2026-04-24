@@ -50,3 +50,15 @@ Snelle codegids (voor makkelijk terugvinden):
   - WiFi, MQTT en Victron IDs (lokaal invullen, niet committen met echte secrets).
 - `boot_animation.h`
   - Opstartanimatie en visuele onboarding.
+
+CLI testen in deze omgeving (zonder Arduino IDE):
+1. Installeer Arduino CLI + ESP32 core + libraries:
+   - `./scripts/setup_arduino_cli.sh`
+2. Compile test draaien:
+   - `./scripts/test_compile.sh`
+
+Wat dit doet:
+- Installeert `arduino-cli` lokaal in `.arduino/bin` (repo-lokaal, geen systeempakket nodig).
+- Zet de ESP32 board index aan en installeert `esp32:esp32`.
+- Installeert de gebruikte libraries (TFT_eSPI, EspMQTTClient, ArduinoJson en LilyGo AMOLED Series via GitHub).
+- Draait een compile check voor `esp32:esp32:esp32s3`.
