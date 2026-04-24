@@ -59,3 +59,7 @@
 #define GENERAL_SETTINGS_ENABLE_DASHBOARD_UI                         true
 #define GENERAL_SETTINGS_ENABLE_FLOW_ANIMATIE                        true
 #define GENERAL_SETTINGS_ENABLE_SPARKLINES                           true
+#define GENERAL_SETTINGS_ANIMATIE_SNELHEID                           2
+// 1 = langzaam
+// 2 = normaal
+// 3 = snel
