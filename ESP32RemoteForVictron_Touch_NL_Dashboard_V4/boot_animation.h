@@ -75,6 +75,7 @@ extern void RefreshDisplay();
 extern const char *programVersion;
 extern EspMQTTClient client;
 extern bool boardHasTouch;
+extern void QueueBootCrossfadeFromCurrentFrame();
 
 struct BootStatus
 {
@@ -323,6 +324,6 @@ static void RunPremiumBootAnimation(const BootStatus &initialStatus = BootStatus
   status.touchReady = boardHasTouch;
   DrawPremiumBootFrame(1.0F, status);
   RefreshDisplay();
-  delay(120);
+  QueueBootCrossfadeFromCurrentFrame();
 #endif
 }
