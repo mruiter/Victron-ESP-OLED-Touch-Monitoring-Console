@@ -63,3 +63,15 @@
 // 1 = langzaam
 // 2 = normaal
 // 3 = snel
+
+#define BOOT_ANIMATION_ENABLED                                       true
+#define BOOT_ANIMATION_DURATION_MS                                   2800UL
+#define BOOT_ANIMATION_MIN_FRAME_MS                                  26UL
+#define BOOT_ANIMATION_HARD_TIMEOUT_MS                               5000UL
+#define BOOT_ANIMATION_TITLE                                         "VICTRON ESP"
+#define BOOT_ANIMATION_SUBTITLE                                      "Monitoring Console"
+#define BOOT_ANIMATION_ACCENT                                        TFT_CYAN
+#define BOOT_ANIMATION_SUCCESS                                       TFT_GREEN
+#define BOOT_ANIMATION_SOLAR                                         TFT_YELLOW
+#define BOOT_ANIMATION_GRID                                          TFT_BLUE
+#define BOOT_ANIMATION_BATTERY                                       TFT_GREEN
