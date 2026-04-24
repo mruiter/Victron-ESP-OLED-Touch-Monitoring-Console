@@ -10,6 +10,7 @@
 #include <TFT_eSPI.h>
 #include <math.h>
 #include "boot_animation.h"
+#include "language.h"
 
 #define TFT_WIDTH 536
 #define TFT_HEIGHT 240
@@ -20,8 +21,8 @@
 // -----------------------------------------------------------------------------
 // App metadata and hardware globals
 // -----------------------------------------------------------------------------
-const char *programName = "ESP32 Remote voor Victron";
-const char *programVersion = "Touch NL dashboard v4";
+const char *programName = "ESP32 Remote for Victron";
+const char *programVersion = "Touch dashboard v4";
 
 LilyGo_Class amoled;
 TFT_eSPI tft = TFT_eSPI();
@@ -78,7 +79,8 @@ float batteryPower = 0.0F;
 float ACOutL1Watts = 0.0F;
 float ACOutL2Watts = 0.0F;
 float ACOutL3Watts = 0.0F;
-String chargingState = "Onbekend";
+AppLanguage currentLanguage = NormalizeLanguageSetting(GENERAL_SETTINGS_DEFAULT_LANGUAGE);
+String chargingState = "";
 String toastMessage = "";
 String pendingActionLabel = "";
 
@@ -211,6 +213,7 @@ TouchBox detailRange24hBox = {0, 0, 0, 0, false};
 TouchBox detailRange7dBox = {0, 0, 0, 0, false};
 TouchBox brightnessModeBox = {0, 0, 0, 0, false};
 TouchBox lockBox = {0, 0, 0, 0, false};
+TouchBox languageBox = {0, 0, 0, 0, false};
 TouchBox dialogYesBox = {0, 0, 0, 0, false};
 TouchBox dialogNoBox = {0, 0, 0, 0, false};
 TouchBox dialogCancelBox = {0, 0, 0, 0, false};
@@ -228,6 +231,32 @@ void DebugPrint(const String &msg)
 {
   if (generalDebugOutput)
     Serial.println(msg);
+}
+
+const LanguagePack &L()
+{
+  return GetLanguagePack(currentLanguage);
+}
+
+String BoolLabel(bool value)
+{
+  return value ? L().yesLabel : L().noLabel;
+}
+
+String ChargingStateFromCode(int stateCode)
+{
+  switch (stateCode)
+  {
+  case 0: return L().offLabel;
+  case 2: return L().errorLabel;
+  case 3: return L().bulkLabel;
+  case 4: return L().absorptionLabel;
+  case 5: return L().floatLabel;
+  case 6: return L().storageLabel;
+  case 7: return L().equalizeLabel;
+  case 252: return "ESS";
+  default: return L().unknownLabel;
+  }
 }
 
 void RefreshDisplay()
@@ -313,9 +342,9 @@ String BrightnessModeLabel()
 {
   switch (brightnessMode)
   {
-  case BRIGHTNESS_DAY: return "Dag";
-  case BRIGHTNESS_NIGHT: return "Nacht";
-  default: return "Auto";
+  case BRIGHTNESS_DAY: return L().dayLabel;
+  case BRIGHTNESS_NIGHT: return L().nightLabel;
+  default: return L().autoLabel;
   }
 }
 
@@ -334,15 +363,15 @@ uint16_t AppBackgroundColor()
   return nightThemeActive ? TFT_NAVY : TFT_BLACK;
 }
 
-String ModeToDutch(multiplusMode mode)
+String ModeLabel(multiplusMode mode)
 {
   switch (mode)
   {
-  case ChargerOnly: return "alleen lader";
-  case InverterOnly: return "alleen omvormer";
-  case On: return "aan";
-  case Off: return "uit";
-  default: return "onbekend";
+  case ChargerOnly: return String(L().chargerLabel) + " " + L().onLabel;
+  case InverterOnly: return String(L().inverterLabel) + " " + L().onLabel;
+  case On: return L().onLabel;
+  case Off: return L().offLabel;
+  default: return L().unknownLabel;
   }
 }
 
@@ -360,14 +389,14 @@ String ChargerStatus()
 {
   if (currentMultiplusMode == Unknown)
     return "?";
-  return ChargerIsOn(currentMultiplusMode) ? "aan" : "uit";
+  return ChargerIsOn(currentMultiplusMode) ? L().onLabel : L().offLabel;
 }
 
 String InverterStatus()
 {
   if (currentMultiplusMode == Unknown)
     return "?";
-  return InverterIsOn(currentMultiplusMode) ? "aan" : "uit";
+  return InverterIsOn(currentMultiplusMode) ? L().onLabel : L().offLabel;
 }
 
 uint16_t StatusColor(bool onState, bool unknown)
@@ -422,9 +451,9 @@ unsigned long AnimatieFrameIntervalMs()
 
 String AnimatieSnelheidLabel()
 {
-  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID <= 1) return "langzaam";
-  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID >= 3) return "snel";
-  return "normaal";
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID <= 1) return L().slowLabel;
+  if (GENERAL_SETTINGS_ANIMATIE_SNELHEID >= 3) return L().fastLabel;
+  return L().normalLabel;
 }
 
 uint16_t BlendColor565(uint16_t c1, uint16_t c2, float ratio)
@@ -640,16 +669,16 @@ void DrawEnergyFlowSummary(int y)
   bool gridToLoad = dispGridWatts > 40.0F && dispACLoadWatts > 50.0F;
   bool loadToGrid = dispGridWatts < -40.0F;
 
-  String flowText = "Rust";
-  if (pvToBattery) flowText = "Zon -> Accu";
-  else if (batteryToLoad) flowText = "Accu -> AC";
-  else if (gridToLoad) flowText = "Net -> AC";
-  else if (loadToGrid) flowText = "AC -> Net";
+  String flowText = L().flowIdle;
+  if (pvToBattery) flowText = L().flowSolarToBattery;
+  else if (batteryToLoad) flowText = L().flowBatteryToAc;
+  else if (gridToLoad) flowText = L().flowGridToAc;
+  else if (loadToGrid) flowText = L().flowAcToGrid;
 
   sprite.drawString(flowText, x + w / 2, y + 9);
   sprite.setTextFont(1);
   sprite.setTextColor(TFT_LIGHTGREY, AppBackgroundColor());
-  sprite.drawString(String("Net ") + FormatWatts(dispGridWatts) + "  |  Zon " + FormatWatts(dispSolarWatts), x + w / 2, y + 21);
+  sprite.drawString(String(L().gridLabel) + " " + FormatWatts(dispGridWatts) + "  |  " + L().solarLabel + " " + FormatWatts(dispSolarWatts), x + w / 2, y + 21);
 }
 
 void SetDisplayOrientation()
@@ -724,7 +753,7 @@ void SyncTimeIfNeeded()
   if (getLocalTime(&timeinfo, 3000))
   {
     timeConfigured = true;
-    DebugPrint("Tijd gesynchroniseerd");
+    DebugPrint("Time synchronized");
   }
 }
 
@@ -827,7 +856,7 @@ bool ApplyMultiplusMode(multiplusMode desiredMultiplusMode)
 
   if (sourceMode == Unknown)
   {
-    SetToast("Schakelen geblokkeerd: status onbekend", 2500);
+    SetToast(L().toastSwitchBlockedUnknown, 2500);
     return false;
   }
   if (desiredMultiplusMode == Unknown || desiredMultiplusMode == sourceMode || VictronInstallationID == "+" || MultiplusThreeDigitID == "+")
@@ -846,7 +875,7 @@ bool ApplyMultiplusMode(multiplusMode desiredMultiplusMode)
   expectedMultiplusMode = desiredMultiplusMode;
   pendingAction = true;
   pendingActionStarted = millis();
-  pendingActionLabel = "Schakelen...";
+  pendingActionLabel = L().toastSwitching;
   client.publish("W/" + VictronInstallationID + "/vebus/" + MultiplusThreeDigitID + "/Mode", "{\"value\": " + modeCodeValue + "}");
   SetKeepDisplayOnTimeOut(GENERAL_SETTINGS_DISPLAY_TIMEOUT_MINUTEN);
   return true;
@@ -856,19 +885,19 @@ void StartToggleRequest(multiplusFunction option)
 {
   if (touchLocked)
   {
-    SetToast("Touch is vergrendeld", 1500);
+    SetToast(L().toastTouchLocked, 1500);
     return;
   }
 
   if (!GENERAL_SETTINGS_ALLOW_CHANGING_INVERTER_AND_CHARGER_MODES)
   {
-    SetToast("Bediening uitgeschakeld", 1500);
+    SetToast(L().toastControlsDisabled, 1500);
     return;
   }
 
   if (currentMultiplusMode == Unknown && lastKnownMultiplusMode == Unknown)
   {
-    SetToast("Status onbekend, wacht op MQTT", 2000);
+    SetToast(L().toastStatusUnknownWait, 2000);
     return;
   }
 
@@ -905,11 +934,11 @@ void UpdateChargingStateFallback()
   if (SolarChargerThreeDigitID != "+")
     return;
   if (batteryPower > 25.0F)
-    chargingState = "Laden";
+    chargingState = L().chargingLabel;
   else if (batteryPower < -25.0F)
-    chargingState = "Ontladen";
+    chargingState = L().dischargingLabel;
   else
-    chargingState = "Rust";
+    chargingState = L().idleLabel;
 }
 
 void SubscribeToChargingState()
@@ -934,15 +963,15 @@ void SubscribeToChargingState()
                      int stateCode = doc["value"] | -1;
                      switch (stateCode)
                      {
-                     case 0: chargingState = "Uit"; break;
-                     case 2: chargingState = "Fout"; break;
-                     case 3: chargingState = "Bulk"; break;
-                     case 4: chargingState = "Absorptie"; break;
-                     case 5: chargingState = "Float"; break;
-                     case 6: chargingState = "Opslag"; break;
-                     case 7: chargingState = "Equalize"; break;
-                     case 252: chargingState = "ESS"; break;
-                     default: chargingState = "Onbekend"; break;
+                     case 0: chargingState = ChargingStateFromCode(0); break;
+                     case 2: chargingState = ChargingStateFromCode(2); break;
+                     case 3: chargingState = ChargingStateFromCode(3); break;
+                     case 4: chargingState = ChargingStateFromCode(4); break;
+                     case 5: chargingState = ChargingStateFromCode(5); break;
+                     case 6: chargingState = ChargingStateFromCode(6); break;
+                     case 7: chargingState = ChargingStateFromCode(7); break;
+                     case 252: chargingState = ChargingStateFromCode(252); break;
+                     default: chargingState = ChargingStateFromCode(-1); break;
                      }
                      lastMQTTUpdateReceived = millis();
                      displayDirty = true;
@@ -1054,9 +1083,9 @@ void SubscribeToCoreTopics()
       pendingAction = false;
       pendingActionLabel = "";
       if (expectedMultiplusMode == currentMultiplusMode)
-        SetToast("Schakeling bevestigd", 1200);
+        SetToast(L().toastSwitchConfirmed, 1200);
       else
-        SetToast("Modus bijgewerkt", 1200);
+        SetToast(L().toastModeUpdated, 1200);
     }
     expectedMultiplusMode = Unknown;
     lastMQTTUpdateReceived = millis();
@@ -1066,7 +1095,7 @@ void SubscribeToCoreTopics()
   SubscribeToChargingState();
   subscriptionsReady = true;
   PublishKeepAlive(true);
-  DebugPrint("Abonnementen actief");
+  DebugPrint("Subscriptions active");
 }
 
 void TryDiscoverySubscriptions()
@@ -1211,21 +1240,21 @@ void DrawStatusBar()
   int visibleTabs = 3 + (GENERAL_SETTINGS_TOON_DETAIL_PAGINA ? 1 : 0) + (GENERAL_SETTINGS_TOON_SYSTEEM_PAGINA ? 1 : 0);
   int x = TFT_WIDTH - (visibleTabs * tabW + (visibleTabs - 1) * gap) - 4;
 
-  DrawButtonBox(x, tabY, tabW, 18, "Over", currentPage == PAGE_OVERVIEW ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageOverviewBox);
+  DrawButtonBox(x, tabY, tabW, 18, L().tabOverview, currentPage == PAGE_OVERVIEW ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageOverviewBox);
   x += tabW + gap;
   if (GENERAL_SETTINGS_TOON_DETAIL_PAGINA)
   {
-    DrawButtonBox(x, tabY, tabW, 18, "Det", currentPage == PAGE_DETAIL ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageDetailBox);
+    DrawButtonBox(x, tabY, tabW, 18, L().tabDetail, currentPage == PAGE_DETAIL ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageDetailBox);
     x += tabW + gap;
   }
   if (GENERAL_SETTINGS_TOON_SYSTEEM_PAGINA)
   {
-    DrawButtonBox(x, tabY, tabW, 18, "Sys", currentPage == PAGE_SYSTEM ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageSystemBox);
+    DrawButtonBox(x, tabY, tabW, 18, L().tabSystem, currentPage == PAGE_SYSTEM ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageSystemBox);
     x += tabW + gap;
   }
   DrawButtonBox(x, tabY, tabW, 18, BrightnessModeLabel(), nightThemeActive ? TFT_NAVY : TFT_DARKGREY, TFT_WHITE, false, &brightnessModeBox);
   x += tabW + gap;
-  DrawButtonBox(x, tabY, tabW, 18, touchLocked ? "Lock" : "Open", touchLocked ? TFT_RED : TFT_DARKGREY, TFT_WHITE, false, &lockBox);
+  DrawButtonBox(x, tabY, tabW, 18, touchLocked ? L().lockLabel : L().unlockLabel, touchLocked ? TFT_RED : TFT_DARKGREY, TFT_WHITE, false, &lockBox);
 }
 
 void DrawOverviewPage()
@@ -1243,19 +1272,19 @@ void DrawOverviewPage()
   bool inverterOn = InverterIsOn(currentMultiplusMode == Unknown ? lastKnownMultiplusMode : currentMultiplusMode);
 
   if (GENERAL_SETTINGS_SHOW_CHARGER_MODE)
-    DrawButtonBox(leftColX, yOffset, statusTileW, statusTileH, "Lader " + ChargerStatus(), BlendColor565(StatusColor(chargerOn, modeUnknown), TFT_BLACK, 0.30F + PulseFactor() * (chargerOn ? 0.15F : 0.0F)), TFT_WHITE, SameTouchBox(chargerTouchBox, lastTouchedBox) && millis() < activeTouchUntil, &chargerTouchBox);
+    DrawButtonBox(leftColX, yOffset, statusTileW, statusTileH, String(L().chargerLabel) + " " + ChargerStatus(), BlendColor565(StatusColor(chargerOn, modeUnknown), TFT_BLACK, 0.30F + PulseFactor() * (chargerOn ? 0.15F : 0.0F)), TFT_WHITE, SameTouchBox(chargerTouchBox, lastTouchedBox) && millis() < activeTouchUntil, &chargerTouchBox);
   else
     DisableBox(chargerTouchBox);
 
   if (GENERAL_SETTINGS_SHOW_INVERTER_MODE)
-    DrawButtonBox(leftColX, TFT_HEIGHT - 46, statusTileW, statusTileH, "Omvormer " + InverterStatus(), BlendColor565(StatusColor(inverterOn, modeUnknown), TFT_BLACK, 0.30F + PulseFactor(1100UL) * (inverterOn ? 0.15F : 0.0F)), TFT_WHITE, SameTouchBox(inverterTouchBox, lastTouchedBox) && millis() < activeTouchUntil, &inverterTouchBox);
+    DrawButtonBox(leftColX, TFT_HEIGHT - 46, statusTileW, statusTileH, String(L().inverterLabel) + " " + InverterStatus(), BlendColor565(StatusColor(inverterOn, modeUnknown), TFT_BLACK, 0.30F + PulseFactor(1100UL) * (inverterOn ? 0.15F : 0.0F)), TFT_WHITE, SameTouchBox(inverterTouchBox, lastTouchedBox) && millis() < activeTouchUntil, &inverterTouchBox);
   else
     DisableBox(inverterTouchBox);
 
-  DrawMetricCard(leftColX, yOffset + 50, 156, 58, "Zon", FormatWatts(dispSolarWatts), TFT_YELLOW, dispSolarWatts > 30.0F);
-  DrawMetricCard(leftColX, yOffset + 116, 156, 58, "Net", FormatWatts(dispGridWatts), TFT_CYAN, fabsf(dispGridWatts) > 30.0F);
-  DrawMetricCard(rightColX, yOffset + 50, 162, 58, "AC-belasting", FormatWatts(dispACLoadWatts), TFT_SILVER, dispACLoadWatts > 50.0F);
-  DrawMetricCard(rightColX, yOffset + 116, 162, 58, "Accu verm.", FormatWatts(dispBatteryPower), TFT_ORANGE, fabsf(dispBatteryPower) > 25.0F);
+  DrawMetricCard(leftColX, yOffset + 50, 156, 58, L().solarLabel, FormatWatts(dispSolarWatts), TFT_YELLOW, dispSolarWatts > 30.0F);
+  DrawMetricCard(leftColX, yOffset + 116, 156, 58, L().gridLabel, FormatWatts(dispGridWatts), TFT_CYAN, fabsf(dispGridWatts) > 30.0F);
+  DrawMetricCard(rightColX, yOffset + 50, 162, 58, L().acLoadLabel, FormatWatts(dispACLoadWatts), TFT_SILVER, dispACLoadWatts > 50.0F);
+  DrawMetricCard(rightColX, yOffset + 116, 162, 58, L().batteryPowerLabel, FormatWatts(dispBatteryPower), TFT_ORANGE, fabsf(dispBatteryPower) > 25.0F);
 
   uint16_t batteryColor = dispBatterySOC <= 20 ? TFT_RED : (dispBatterySOC <= 40 ? TFT_YELLOW : TFT_GREEN);
   int outerRadius = 58;
@@ -1269,7 +1298,7 @@ void DrawOverviewPage()
   sprite.setTextFont(6);
   sprite.drawString(String((int)round(dispBatterySOC)) + "%", centerX, centerY - 4);
   sprite.setTextFont(GENERAL_SETTINGS_GROTE_NEDERLANDSE_LABELS ? 4 : 2);
-  sprite.drawString("Accu", centerX, centerY - 36);
+  sprite.drawString(L().batteryLabel, centerX, centerY - 36);
 
   String extra = "";
   if (GENERAL_SETTINGS_SHOW_ADDITIONAL_INFO)
@@ -1324,28 +1353,28 @@ void DrawDetailPage()
   sprite.setTextDatum(TL_DATUM);
   sprite.setTextColor(TFT_WHITE, AppBackgroundColor());
   sprite.setTextFont(2);
-  sprite.drawString("Grafieken", 8, y);
+  sprite.drawString(L().chartsLabel, 8, y);
   DrawButtonBox(110, y - 2, 52, 18, "1u", selectedHistoryRange == HISTORY_RANGE_1H ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &detailRange1hBox);
   DrawButtonBox(166, y - 2, 52, 18, "24u", selectedHistoryRange == HISTORY_RANGE_24H ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &detailRange24hBox);
   DrawButtonBox(222, y - 2, 52, 18, "7d", selectedHistoryRange == HISTORY_RANGE_7D ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &detailRange7dBox);
-  sprite.drawString(String("Range: ") + HistoryRangeLabel(selectedHistoryRange), 282, y);
+  sprite.drawString(String(L().rangeLabel) + ": " + HistoryRangeLabel(selectedHistoryRange), 282, y);
 
-  DrawMetricCard(8, y + 18, 250, 54, "Net", FormatWatts(dispGridWatts), TFT_CYAN, fabsf(dispGridWatts) > 30.0F);
+  DrawMetricCard(8, y + 18, 250, 54, L().gridLabel, FormatWatts(dispGridWatts), TFT_CYAN, fabsf(dispGridWatts) > 30.0F);
   DrawSparkline(series.grid, TFT_CYAN, 16, y + 54, 234, 12, false, series.size, series.index, series.wrapped);
-  DrawMetricCard(278, y + 18, 250, 54, "Zon", FormatWatts(dispSolarWatts), TFT_YELLOW, dispSolarWatts > 30.0F);
+  DrawMetricCard(278, y + 18, 250, 54, L().solarLabel, FormatWatts(dispSolarWatts), TFT_YELLOW, dispSolarWatts > 30.0F);
   DrawSparkline(series.solar, TFT_YELLOW, 286, y + 54, 234, 12, false, series.size, series.index, series.wrapped);
 
-  DrawMetricCard(8, y + 84, 250, 54, "AC-belasting", FormatWatts(dispACLoadWatts), TFT_SILVER, dispACLoadWatts > 50.0F);
+  DrawMetricCard(8, y + 84, 250, 54, L().acLoadLabel, FormatWatts(dispACLoadWatts), TFT_SILVER, dispACLoadWatts > 50.0F);
   DrawSparkline(series.load, TFT_SILVER, 16, y + 120, 234, 12, false, series.size, series.index, series.wrapped);
-  DrawMetricCard(278, y + 84, 250, 54, "Accu verm.", FormatWatts(dispBatteryPower), TFT_ORANGE, fabsf(dispBatteryPower) > 25.0F);
+  DrawMetricCard(278, y + 84, 250, 54, L().batteryPowerLabel, FormatWatts(dispBatteryPower), TFT_ORANGE, fabsf(dispBatteryPower) > 25.0F);
   DrawSparkline(series.battery, TFT_ORANGE, 286, y + 120, 234, 12, true, series.size, series.index, series.wrapped);
 
   sprite.setTextColor(TFT_LIGHTGREY, AppBackgroundColor());
   sprite.setTextFont(2);
-  sprite.drawString("Modus: " + ModeToDutch(currentMultiplusMode == Unknown ? lastKnownMultiplusMode : currentMultiplusMode), 10, y + 146);
-  sprite.drawString("Laadstatus: " + chargingState + "    Laatste update: " + StatusAgeText(), 10, y + 166);
-  sprite.drawString("Accu: " + String((int)round(dispBatterySOC)) + "%    TTG: " + FormatMinutes(dispBatteryTTG), 10, y + 186);
-  sprite.drawString("Grid L1/L2/L3: " + FormatWatts(gridInL1Watts) + " | " + FormatWatts(gridInL2Watts) + " | " + FormatWatts(gridInL3Watts), 10, y + 206);
+  sprite.drawString(String(L().modeLabel) + ": " + ModeLabel(currentMultiplusMode == Unknown ? lastKnownMultiplusMode : currentMultiplusMode), 10, y + 146);
+  sprite.drawString(String(L().chargeStatusLabel) + ": " + chargingState + "    " + L().lastUpdateLabel + ": " + StatusAgeText(), 10, y + 166);
+  sprite.drawString(String(L().batteryLabel) + ": " + String((int)round(dispBatterySOC)) + "%    TTG: " + FormatMinutes(dispBatteryTTG), 10, y + 186);
+  sprite.drawString(String(L().gridLabel) + " L1/L2/L3: " + FormatWatts(gridInL1Watts) + " | " + FormatWatts(gridInL2Watts) + " | " + FormatWatts(gridInL3Watts), 10, y + 206);
 }
 
 void DrawSystemPage()
@@ -1356,23 +1385,26 @@ void DrawSystemPage()
   sprite.setTextColor(TFT_WHITE, AppBackgroundColor());
   sprite.setTextFont(2);
 
-  sprite.drawString(programName, 8, y); y += line;
-  sprite.drawString(programVersion, 8, y); y += line;
-  sprite.drawString(String("Touch: ") + (boardHasTouch ? "ja" : "nee"), 8, y); y += line;
-  sprite.drawString(String("Touch slot: ") + (touchLocked ? "AAN" : "UIT"), 8, y); y += line;
-  sprite.drawString(String("Direct schakelen: ") + (GENERAL_SETTINGS_DIRECT_SCHAKELEN ? "ja" : "nee"), 8, y); y += line;
-  sprite.drawString(String("Bevestiging popup: ") + (GENERAL_SETTINGS_TOON_BEVESTIGING_POPUP ? "ja" : "nee"), 8, y); y += line;
-  sprite.drawString("Animatiesnelheid: " + AnimatieSnelheidLabel(), 8, y); y += line;
-  sprite.drawString("Brightness modus: " + BrightnessModeLabel(), 8, y); y += line;
-  sprite.drawString(String("Nachtthema: ") + (nightThemeActive ? "AAN" : "UIT"), 8, y); y += line;
-  sprite.drawString("Helderheid: " + String(currentBrightness), 8, y); y += line;
-  sprite.drawString("WiFi: " + String(client.isWifiConnected() ? "verbonden" : "niet verbonden"), 8, y); y += line;
-  sprite.drawString("MQTT: " + String(client.isMqttConnected() ? "verbonden" : "niet verbonden"), 8, y); y += line;
-  sprite.drawString("Installatie ID: " + VictronInstallationID, 8, y); y += line;
-  sprite.drawString("Multiplus ID: " + MultiplusThreeDigitID, 8, y); y += line;
-  sprite.drawString("Solar charger ID: " + SolarChargerThreeDigitID, 8, y); y += line;
-  sprite.drawString("Tijd: " + CurrentTimeString(), 8, y); y += line;
-  sprite.drawString("Laatste update: " + StatusAgeText(), 8, y);
+  sprite.drawString(L().programName, 8, y); y += line;
+  sprite.drawString(L().programVersion, 8, y); y += line;
+  sprite.drawString(String(L().touchLabel) + ": " + BoolLabel(boardHasTouch), 8, y); y += line;
+  sprite.drawString(String(L().touchLockLabel) + ": " + (touchLocked ? L().onLabel : L().offLabel), 8, y); y += line;
+  sprite.drawString(String(L().directSwitchLabel) + ": " + BoolLabel(GENERAL_SETTINGS_DIRECT_SCHAKELEN), 8, y); y += line;
+  sprite.drawString(String(L().confirmPopupLabel) + ": " + BoolLabel(GENERAL_SETTINGS_TOON_BEVESTIGING_POPUP), 8, y); y += line;
+  sprite.drawString(String(L().animationSpeedLabel) + ": " + AnimatieSnelheidLabel(), 8, y); y += line;
+  sprite.drawString(String(L().brightnessModeLabel) + ": " + BrightnessModeLabel(), 8, y); y += line;
+  sprite.drawString(String(L().nightThemeLabel) + ": " + (nightThemeActive ? L().onLabel : L().offLabel), 8, y); y += line;
+  sprite.drawString(String(L().brightnessLabel) + ": " + String(currentBrightness), 8, y); y += line;
+  sprite.drawString(String(L().wifiLabel) + ": " + String(client.isWifiConnected() ? L().connectedLabel : L().notConnectedLabel), 8, y); y += line;
+  sprite.drawString(String(L().mqttLabel) + ": " + String(client.isMqttConnected() ? L().connectedLabel : L().notConnectedLabel), 8, y); y += line;
+  sprite.drawString(String(L().languageLabel) + ": " + L().languageName, 8, y);
+  EnableBox(languageBox, 8, y - 1, TFT_WIDTH - 8, y + 14);
+  y += line;
+  sprite.drawString(String(L().installationIdLabel) + ": " + VictronInstallationID, 8, y); y += line;
+  sprite.drawString(String(L().multiplusIdLabel) + ": " + MultiplusThreeDigitID, 8, y); y += line;
+  sprite.drawString(String(L().solarChargerIdLabel) + ": " + SolarChargerThreeDigitID, 8, y); y += line;
+  sprite.drawString(String(L().timeLabel) + ": " + CurrentTimeString(), 8, y); y += line;
+  sprite.drawString(String(L().lastUpdateLabel) + ": " + StatusAgeText(), 8, y);
 }
 
 void DrawDialog()
@@ -1389,14 +1421,16 @@ void DrawDialog()
   sprite.setTextDatum(MC_DATUM);
   sprite.setTextColor(TFT_WHITE, TFT_DARKGREY);
   sprite.setTextFont(2);
-  String target = (pendingFunction == Charger) ? "Lader" : "Omvormer";
-  sprite.drawString("Wil je de " + target + " schakelen?", TFT_WIDTH / 2, boxY + 24);
-  sprite.drawString("Huidige modus: " + ModeToDutch(currentMultiplusMode == Unknown ? lastKnownMultiplusMode : currentMultiplusMode), TFT_WIDTH / 2, boxY + 48);
-  sprite.drawString("Nieuwe modus: " + ModeToDutch(ComputeDesiredMode(pendingFunction)), TFT_WIDTH / 2, boxY + 68);
+  String target = (pendingFunction == Charger) ? L().chargerLabel : L().inverterLabel;
+  char askBuf[96];
+  snprintf(askBuf, sizeof(askBuf), L().switchQuestionTemplate, target.c_str());
+  sprite.drawString(String(askBuf), TFT_WIDTH / 2, boxY + 24);
+  sprite.drawString(String(L().currentModeLabel) + ": " + ModeLabel(currentMultiplusMode == Unknown ? lastKnownMultiplusMode : currentMultiplusMode), TFT_WIDTH / 2, boxY + 48);
+  sprite.drawString(String(L().newModeLabel) + ": " + ModeLabel(ComputeDesiredMode(pendingFunction)), TFT_WIDTH / 2, boxY + 68);
 
-  DrawButtonBox(boxX + 16, boxY + 86, 90, 24, "Ja", TFT_GREEN, TFT_WHITE, false, &dialogYesBox);
-  DrawButtonBox(boxX + 122, boxY + 86, 90, 24, "Nee", TFT_RED, TFT_WHITE, false, &dialogNoBox);
-  DrawButtonBox(boxX + 228, boxY + 86, 120, 24, "Annuleren", TFT_BLACK, TFT_WHITE, false, &dialogCancelBox);
+  DrawButtonBox(boxX + 16, boxY + 86, 90, 24, L().yesLabel, TFT_GREEN, TFT_WHITE, false, &dialogYesBox);
+  DrawButtonBox(boxX + 122, boxY + 86, 90, 24, L().noLabel, TFT_RED, TFT_WHITE, false, &dialogNoBox);
+  DrawButtonBox(boxX + 228, boxY + 86, 120, 24, L().cancelLabel, TFT_BLACK, TFT_WHITE, false, &dialogCancelBox);
 }
 
 void DrawToast()
@@ -1452,6 +1486,7 @@ void UpdateDisplay()
   DisableBox(detailRange1hBox);
   DisableBox(detailRange24hBox);
   DisableBox(detailRange7dBox);
+  DisableBox(languageBox);
 
   DrawStatusBar();
 
@@ -1460,7 +1495,7 @@ void UpdateDisplay()
     sprite.setTextDatum(MC_DATUM);
     sprite.setTextColor(TFT_WHITE, TFT_BLACK);
     sprite.setTextFont(4);
-    sprite.drawString("Wachten op wifi", TFT_WIDTH / 2, TFT_HEIGHT / 2);
+    sprite.drawString(L().waitWifiLabel, TFT_WIDTH / 2, TFT_HEIGHT / 2);
     DrawToast();
     RefreshDisplay();
     return;
@@ -1471,7 +1506,7 @@ void UpdateDisplay()
     sprite.setTextDatum(MC_DATUM);
     sprite.setTextColor(TFT_WHITE, TFT_BLACK);
     sprite.setTextFont(4);
-    sprite.drawString("Wachten op MQTT", TFT_WIDTH / 2, TFT_HEIGHT / 2);
+    sprite.drawString(L().waitMqttLabel, TFT_WIDTH / 2, TFT_HEIGHT / 2);
     DrawToast();
     RefreshDisplay();
     return;
@@ -1482,7 +1517,7 @@ void UpdateDisplay()
     sprite.setTextDatum(MC_DATUM);
     sprite.setTextColor(TFT_ORANGE, TFT_BLACK);
     sprite.setTextFont(2);
-    sprite.drawString("Let op: MQTT data is oud", TFT_WIDTH / 2, 42);
+    sprite.drawString(L().oldMqttDataLabel, TFT_WIDTH / 2, 42);
   }
 
   if (currentPage == PAGE_DETAIL && !GENERAL_SETTINGS_TOON_DETAIL_PAGINA)
@@ -1605,7 +1640,7 @@ void ProcessTap(int16_t tx, int16_t ty)
   {
     RememberTouchedBox(lockBox);
     touchLocked = !touchLocked;
-    SetToast(touchLocked ? "Touch vergrendeld" : "Touch ontgrendeld", 1500);
+    SetToast(touchLocked ? L().toastTouchLockedNow : L().toastTouchUnlockedNow, 1500);
     displayDirty = true;
     return;
   }
@@ -1619,7 +1654,17 @@ void ProcessTap(int16_t tx, int16_t ty)
     else
       brightnessMode = BRIGHTNESS_AUTO;
     UpdateBrightness();
-    SetToast(String("Brightness: ") + BrightnessModeLabel(), 1200);
+    SetToast(String(L().toastBrightnessPrefix) + ": " + BrightnessModeLabel(), 1200);
+    displayDirty = true;
+    return;
+  }
+  if (PointInTouchBox(tx, ty, languageBox))
+  {
+    RememberTouchedBox(languageBox);
+    currentLanguage = NextLanguage(currentLanguage);
+    chargingState = ChargingStateFromCode(-1);
+    UpdateChargingStateFallback();
+    SetToast(String(L().toastLanguagePrefix) + ": " + L().languageName, 1300);
     displayDirty = true;
     return;
   }
@@ -1651,7 +1696,7 @@ void ProcessTap(int16_t tx, int16_t ty)
 
   if (touchLocked)
   {
-    SetToast("Touch is vergrendeld", 1200);
+    SetToast(L().toastTouchLocked, 1200);
     return;
   }
 
@@ -1715,7 +1760,7 @@ void SetupDisplay()
   bool ok = amoled.beginAMOLED_191(true);
   if (!ok)
   {
-    DebugPrint("AMOLED init mislukt");
+    DebugPrint("AMOLED init failed");
     while (true)
       delay(1000);
   }
@@ -1748,6 +1793,7 @@ void setup()
     Serial.begin(GENERAL_SETTINGS_SERIAL_MONITOR_SPEED);
 
   SetupTopAndBottomButtons();
+  chargingState = ChargingStateFromCode(-1);
   SetupDisplay();
   RunPremiumBootAnimation();
   SetupHistoryBuffers();
@@ -1784,7 +1830,7 @@ void loop()
     pendingAction = false;
     pendingActionLabel = "";
     expectedMultiplusMode = Unknown;
-    SetToast("Nog geen bevestigde modusupdate", 1800);
+    SetToast(L().toastNoConfirmedModeUpdate, 1800);
   }
 
   if (GENERAL_SETTINGS_TURN_ON_DISPLAY_AT_SPECIFIC_TIMES_ONLY && IsKeepDisplayOnTimedOut())
