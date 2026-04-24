@@ -17,6 +17,9 @@
 #define topButtonIfUSBIsOnTheLeft 21
 #define bottomButtonIfUSBIsOnTheLeft 0
 
+// -----------------------------------------------------------------------------
+// App metadata and hardware globals
+// -----------------------------------------------------------------------------
 const char *programName = "ESP32 Remote voor Victron";
 const char *programVersion = "Touch NL dashboard v4";
 
@@ -218,6 +221,9 @@ bool displayDirty = true;
 unsigned long lastStatusSecondRendered = 0UL;
 bool statusSecondInitialized = false;
 
+// -----------------------------------------------------------------------------
+// Utility helpers
+// -----------------------------------------------------------------------------
 void DebugPrint(const String &msg)
 {
   if (generalDebugOutput)
@@ -379,6 +385,14 @@ void SetToast(const String &msg, unsigned long durationMs = 2000)
   DebugPrint(msg);
 }
 
+bool ParseMqttFloatValue(const String &payload, float &target)
+{
+  JsonDocument doc;
+  if (deserializeJson(doc, payload) != DeserializationError::Ok)
+    return false;
+  target = doc["value"] | 0.0F;
+  return true;
+}
 
 float SmoothTowards(float current, float target, float factor = 0.18F)
 {
@@ -936,6 +950,9 @@ void SubscribeToChargingState()
   solarStateSubscribed = true;
 }
 
+// -----------------------------------------------------------------------------
+// Data subscriptions and MQTT discovery
+// -----------------------------------------------------------------------------
 void SubscribeToCoreTopics()
 {
   if (subscriptionsReady || VictronInstallationID == "+" || MultiplusThreeDigitID == "+")
@@ -958,49 +975,62 @@ void SubscribeToCoreTopics()
 
   if (GENERAL_SETTINGS_GRID_IN_L1_IS_USED)
     client.subscribe(subGridL1Topic, [](const String &payload) {
-      JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { gridInL1Watts = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+      if (ParseMqttFloatValue(payload, gridInL1Watts))
+        lastMQTTUpdateReceived = millis();
     });
 
   if (GENERAL_SETTINGS_GRID_IN_L2_IS_USED)
     client.subscribe(subGridL2Topic, [](const String &payload) {
-      JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { gridInL2Watts = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+      if (ParseMqttFloatValue(payload, gridInL2Watts))
+        lastMQTTUpdateReceived = millis();
     });
 
   if (GENERAL_SETTINGS_GRID_IN_L3_IS_USED)
     client.subscribe(subGridL3Topic, [](const String &payload) {
-      JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { gridInL3Watts = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+      if (ParseMqttFloatValue(payload, gridInL3Watts))
+        lastMQTTUpdateReceived = millis();
     });
 
   if (GENERAL_SETTINGS_PV_IS_USED)
     client.subscribe(subPvTopic, [](const String &payload) {
-      JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { solarWatts = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+      if (ParseMqttFloatValue(payload, solarWatts))
+        lastMQTTUpdateReceived = millis();
     });
 
   client.subscribe(subBatterySocTopic, [](const String &payload) {
-    JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { batterySOC = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+    if (ParseMqttFloatValue(payload, batterySOC))
+      lastMQTTUpdateReceived = millis();
   });
 
   client.subscribe(subBatteryPowerTopic, [](const String &payload) {
-    JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { batteryPower = doc["value"] | 0.0F; UpdateChargingStateFallback(); lastMQTTUpdateReceived = millis(); }
+    if (ParseMqttFloatValue(payload, batteryPower))
+    {
+      UpdateChargingStateFallback();
+      lastMQTTUpdateReceived = millis();
+    }
   });
 
   client.subscribe(subBatteryTTGTopic, [](const String &payload) {
-    JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { batteryTTG = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+    if (ParseMqttFloatValue(payload, batteryTTG))
+      lastMQTTUpdateReceived = millis();
   });
 
   if (GENERAL_SETTINGS_AC_OUT_L1_IS_USED)
     client.subscribe(subAcL1Topic, [](const String &payload) {
-      JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { ACOutL1Watts = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+      if (ParseMqttFloatValue(payload, ACOutL1Watts))
+        lastMQTTUpdateReceived = millis();
     });
 
   if (GENERAL_SETTINGS_AC_OUT_L2_IS_USED)
     client.subscribe(subAcL2Topic, [](const String &payload) {
-      JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { ACOutL2Watts = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+      if (ParseMqttFloatValue(payload, ACOutL2Watts))
+        lastMQTTUpdateReceived = millis();
     });
 
   if (GENERAL_SETTINGS_AC_OUT_L3_IS_USED)
     client.subscribe(subAcL3Topic, [](const String &payload) {
-      JsonDocument doc; if (deserializeJson(doc, payload) == DeserializationError::Ok) { ACOutL3Watts = doc["value"] | 0.0F; lastMQTTUpdateReceived = millis(); }
+      if (ParseMqttFloatValue(payload, ACOutL3Watts))
+        lastMQTTUpdateReceived = millis();
     });
 
   client.subscribe(subMultiplusModeTopic, [](const String &payload) {
@@ -1383,6 +1413,9 @@ void DrawToast()
   sprite.drawString(toastMessage, TFT_WIDTH / 2, TFT_HEIGHT - 11);
 }
 
+// -----------------------------------------------------------------------------
+// Rendering and input loop
+// -----------------------------------------------------------------------------
 void UpdateDisplay()
 {
   if (!theDisplayIsCurrentlyOn)
