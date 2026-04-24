@@ -377,13 +377,17 @@ void DrawSparkline(const float *arr, uint16_t color, int x, int y, int w, int h,
   }
   if (fabsf(maxV - minV) < 0.001F) { maxV += 1.0F; minV -= 1.0F; }
   int available = historyWrapped ? HISTORY_POINTS : (historyIndex > 2 ? historyIndex : 2);
+  int pointsForScale = historyWrapped ? (HISTORY_POINTS - 1) : (available - 1);
+  if (pointsForScale < 1)
+    pointsForScale = 1;
+
   for (int i = 1; i < available; i++)
   {
     int p0 = historyWrapped ? (historyIndex + i - 1) % HISTORY_POINTS : (i - 1);
     int p1 = historyWrapped ? (historyIndex + i) % HISTORY_POINTS : i;
     float v0 = arr[p0], v1 = arr[p1];
-    int x0 = x + (i - 1) * w / (HISTORY_POINTS - 1);
-    int x1 = x + i * w / (HISTORY_POINTS - 1);
+    int x0 = x + (i - 1) * w / pointsForScale;
+    int x1 = x + i * w / pointsForScale;
     int y0 = y + h - 1 - (int)round((v0 - minV) * (h - 1) / (maxV - minV));
     int y1 = y + h - 1 - (int)round((v1 - minV) * (h - 1) / (maxV - minV));
     sprite.drawLine(x0, y0, x1, y1, color);
@@ -461,11 +465,13 @@ void SetTheDisplayOn(bool on)
   theDisplayIsCurrentlyOn = on;
   if (!on)
   {
+    amoled.setBrightness(0);
     sprite.fillSprite(TFT_BLACK);
     RefreshDisplay();
   }
   else
   {
+    amoled.setBrightness((uint8_t)currentBrightness);
     ResetKeepDisplayOnStartTime();
   }
 }
@@ -537,7 +543,8 @@ void UpdateBrightness()
   if (desired != currentBrightness)
   {
     currentBrightness = desired;
-    amoled.setBrightness((uint8_t)currentBrightness);
+    if (theDisplayIsCurrentlyOn)
+      amoled.setBrightness((uint8_t)currentBrightness);
   }
 }
 
@@ -874,7 +881,7 @@ void TryDiscoverySubscriptions()
   }
 
   if (installationDiscovered)
-    PublishKeepAlive(true);
+    PublishKeepAlive();
 
   if (installationDiscovered && multiplusDiscovered)
     SubscribeToCoreTopics();
