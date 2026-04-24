@@ -30,4 +30,16 @@ export ARDUINO_USER_DIR
 # LilyGo AMOLED library is not always available via index; install from GitHub.
 "${BIN_DIR}/arduino-cli" lib install --git-url https://github.com/Xinyuan-LilyGO/LilyGo-AMOLED-Series.git
 
+if ! "${BIN_DIR}/arduino-cli" core list | awk '$1 == "esp32:esp32" { found=1 } END { exit(found ? 0 : 1) }'; then
+  echo "ERROR: esp32:esp32 core was not installed. Check your network and rerun this script."
+  exit 1
+fi
+
+for required_lib in TFT_eSPI EspMQTTClient ArduinoJson LilyGo; do
+  if ! "${BIN_DIR}/arduino-cli" lib list | grep -Fq "${required_lib}"; then
+    echo "ERROR: Required library '${required_lib}' was not found after installation."
+    exit 1
+  fi
+done
+
 echo "arduino-cli setup complete."
