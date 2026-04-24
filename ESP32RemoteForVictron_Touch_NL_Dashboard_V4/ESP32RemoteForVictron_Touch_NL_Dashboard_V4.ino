@@ -94,9 +94,44 @@ int historyIndex = 0;
 bool historyWrapped = false;
 unsigned long lastHistorySample = 0UL;
 
+enum HistoryRange
+{
+  HISTORY_RANGE_1H,
+  HISTORY_RANGE_24H,
+  HISTORY_RANGE_7D
+};
+
+struct HistorySeries
+{
+  float grid[96] = {0};
+  float solar[96] = {0};
+  float load[96] = {0};
+  float battery[96] = {0};
+  int size = 0;
+  int index = 0;
+  bool wrapped = false;
+  unsigned long intervalMs = 60000UL;
+  unsigned long lastSample = 0UL;
+};
+
+HistorySeries history1h;
+HistorySeries history24h;
+HistorySeries history7d;
+HistoryRange selectedHistoryRange = HISTORY_RANGE_1H;
+
 int topButton = -1;
 int bottomButton = -1;
 int currentBrightness = GENERAL_SETTINGS_DAG_BRIGHTNESS;
+bool nightThemeActive = false;
+
+enum BrightnessMode
+{
+  BRIGHTNESS_AUTO,
+  BRIGHTNESS_DAY,
+  BRIGHTNESS_NIGHT
+};
+
+BrightnessMode brightnessMode = BRIGHTNESS_AUTO;
 
 String discoveryInstallTopic;
 String discoveryVebusTopic;
@@ -167,6 +202,10 @@ TouchBox inverterTouchBox = {0, 0, 0, 0, false};
 TouchBox pageOverviewBox = {0, 0, 0, 0, false};
 TouchBox pageDetailBox = {0, 0, 0, 0, false};
 TouchBox pageSystemBox = {0, 0, 0, 0, false};
+TouchBox detailRange1hBox = {0, 0, 0, 0, false};
+TouchBox detailRange24hBox = {0, 0, 0, 0, false};
+TouchBox detailRange7dBox = {0, 0, 0, 0, false};
+TouchBox brightnessModeBox = {0, 0, 0, 0, false};
 TouchBox lockBox = {0, 0, 0, 0, false};
 TouchBox dialogYesBox = {0, 0, 0, 0, false};
 TouchBox dialogNoBox = {0, 0, 0, 0, false};
@@ -261,6 +300,31 @@ String FormatMinutes(float seconds)
   if (hours > 0)
     return String(hours) + "u " + String(minutes) + "m";
   return String(minutes) + " min";
+}
+
+String BrightnessModeLabel()
+{
+  switch (brightnessMode)
+  {
+  case BRIGHTNESS_DAY: return "Dag";
+  case BRIGHTNESS_NIGHT: return "Nacht";
+  default: return "Auto";
+  }
+}
+
+String HistoryRangeLabel(HistoryRange range)
+{
+  switch (range)
+  {
+  case HISTORY_RANGE_24H: return "24u";
+  case HISTORY_RANGE_7D: return "7d";
+  default: return "1u";
+  }
+}
+
+uint16_t AppBackgroundColor()
+{
+  return nightThemeActive ? TFT_NAVY : TFT_BLACK;
 }
 
 String ModeToDutch(multiplusMode mode)
@@ -365,24 +429,59 @@ bool UpdateAnimatedValues()
   return changed;
 }
 
+void PushHistorySample(HistorySeries &series, float grid, float solar, float load, float battery)
+{
+  if (series.size <= 0)
+    return;
+  series.grid[series.index] = grid;
+  series.solar[series.index] = solar;
+  series.load[series.index] = load;
+  series.battery[series.index] = battery;
+  series.index++;
+  if (series.index >= series.size)
+  {
+    series.index = 0;
+    series.wrapped = true;
+  }
+}
+
+void SampleSeriesIfNeeded(HistorySeries &series, float grid, float solar, float load, float battery)
+{
+  if (millis() - series.lastSample < series.intervalMs)
+    return;
+  series.lastSample = millis();
+  PushHistorySample(series, grid, solar, load, battery);
+}
+
 void SampleHistoryIfNeeded()
 {
   if (millis() - lastHistorySample < 3000UL) return;
   lastHistorySample = millis();
+  float gridNow = gridInL1Watts + gridInL2Watts + gridInL3Watts;
+  float loadNow = ACOutL1Watts + ACOutL2Watts + ACOutL3Watts;
   solarHistory[historyIndex] = solarWatts;
-  gridHistory[historyIndex] = gridInL1Watts + gridInL2Watts + gridInL3Watts;
-  loadHistory[historyIndex] = ACOutL1Watts + ACOutL2Watts + ACOutL3Watts;
+  gridHistory[historyIndex] = gridNow;
+  loadHistory[historyIndex] = loadNow;
   batteryPowerHistory[historyIndex] = batteryPower;
   historyIndex++;
   if (historyIndex >= HISTORY_POINTS) { historyIndex = 0; historyWrapped = true; }
+
+  SampleSeriesIfNeeded(history1h, gridNow, solarWatts, loadNow, batteryPower);
+  SampleSeriesIfNeeded(history24h, gridNow, solarWatts, loadNow, batteryPower);
+  SampleSeriesIfNeeded(history7d, gridNow, solarWatts, loadNow, batteryPower);
 }
 
-void DrawSparkline(const float *arr, uint16_t color, int x, int y, int w, int h, bool symmetric = false)
+void DrawSparkline(const float *arr, uint16_t color, int x, int y, int w, int h, bool symmetric = false, int pointCount = HISTORY_POINTS, int currentIndex = -1, bool wrapped = false)
 {
   if (!GENERAL_SETTINGS_ENABLE_SPARKLINES)
     return;
+  if (pointCount < 2)
+    return;
+  if (currentIndex < 0)
+    currentIndex = historyIndex;
+
   float minV = arr[0], maxV = arr[0];
-  for (int i = 1; i < HISTORY_POINTS; i++)
+  for (int i = 1; i < pointCount; i++)
   {
     if (arr[i] < minV) minV = arr[i];
     if (arr[i] > maxV) maxV = arr[i];
@@ -396,15 +495,15 @@ void DrawSparkline(const float *arr, uint16_t color, int x, int y, int w, int h,
     sprite.drawLine(x, midY, x + w, midY, TFT_DARKGREY);
   }
   if (fabsf(maxV - minV) < 0.001F) { maxV += 1.0F; minV -= 1.0F; }
-  int available = historyWrapped ? HISTORY_POINTS : (historyIndex > 2 ? historyIndex : 2);
-  int pointsForScale = historyWrapped ? (HISTORY_POINTS - 1) : (available - 1);
+  int available = wrapped ? pointCount : (currentIndex > 2 ? currentIndex : 2);
+  int pointsForScale = wrapped ? (pointCount - 1) : (available - 1);
   if (pointsForScale < 1)
     pointsForScale = 1;
 
   for (int i = 1; i < available; i++)
   {
-    int p0 = historyWrapped ? (historyIndex + i - 1) % HISTORY_POINTS : (i - 1);
-    int p1 = historyWrapped ? (historyIndex + i) % HISTORY_POINTS : i;
+    int p0 = wrapped ? (currentIndex + i - 1) % pointCount : (i - 1);
+    int p1 = wrapped ? (currentIndex + i) % pointCount : i;
     float v0 = arr[p0], v1 = arr[p1];
     int x0 = x + (i - 1) * w / pointsForScale;
     int x1 = x + i * w / pointsForScale;
@@ -453,6 +552,43 @@ void DrawStatusBadge(int x, int y, int w, const String &label, bool ok, uint16_t
   sprite.setTextColor(TFT_WHITE, bg);
   sprite.setTextFont(1);
   sprite.drawString(label, x + w / 2, y + 9);
+}
+
+HistorySeries &CurrentHistorySeries()
+{
+  if (selectedHistoryRange == HISTORY_RANGE_24H)
+    return history24h;
+  if (selectedHistoryRange == HISTORY_RANGE_7D)
+    return history7d;
+  return history1h;
+}
+
+void DrawEnergyFlowSummary(int y)
+{
+  int x = 172;
+  int w = 192;
+  int h = 28;
+  sprite.fillRoundRect(x, y, w, h, 8, BlendColor565(AppBackgroundColor(), TFT_CYAN, 0.12F));
+  sprite.drawRoundRect(x, y, w, h, 8, TFT_DARKGREY);
+  sprite.setTextDatum(MC_DATUM);
+  sprite.setTextFont(2);
+  sprite.setTextColor(TFT_WHITE, AppBackgroundColor());
+
+  bool pvToBattery = dispSolarWatts > 60.0F && dispBatteryPower > 20.0F;
+  bool batteryToLoad = dispBatteryPower < -30.0F && dispACLoadWatts > 50.0F;
+  bool gridToLoad = dispGridWatts > 40.0F && dispACLoadWatts > 50.0F;
+  bool loadToGrid = dispGridWatts < -40.0F;
+
+  String flowText = "Rust";
+  if (pvToBattery) flowText = "Zon -> Accu";
+  else if (batteryToLoad) flowText = "Accu -> AC";
+  else if (gridToLoad) flowText = "Net -> AC";
+  else if (loadToGrid) flowText = "AC -> Net";
+
+  sprite.drawString(flowText, x + w / 2, y + 9);
+  sprite.setTextFont(1);
+  sprite.setTextColor(TFT_LIGHTGREY, AppBackgroundColor());
+  sprite.drawString(String("Net ") + FormatWatts(dispGridWatts) + "  |  Zon " + FormatWatts(dispSolarWatts), x + w / 2, y + 21);
 }
 
 void SetDisplayOrientation()
@@ -549,16 +685,38 @@ void UpdateBrightness()
     return;
   lastBrightnessCheck = millis();
 
-  int desired = GENERAL_SETTINGS_DAG_BRIGHTNESS;
+  bool nightByClock = false;
   if (timeConfigured)
   {
     struct tm timeinfo;
     if (getLocalTime(&timeinfo, 50))
     {
       int hour = timeinfo.tm_hour;
-      bool night = (hour >= GENERAL_SETTINGS_NACHT_START_UUR || hour < GENERAL_SETTINGS_DAG_START_UUR);
-      desired = night ? GENERAL_SETTINGS_NACHT_BRIGHTNESS : GENERAL_SETTINGS_DAG_BRIGHTNESS;
+      nightByClock = (hour >= GENERAL_SETTINGS_NACHT_START_UUR || hour < GENERAL_SETTINGS_DAG_START_UUR);
     }
+  }
+
+  int desired = GENERAL_SETTINGS_DAG_BRIGHTNESS;
+  if (brightnessMode == BRIGHTNESS_DAY)
+  {
+    desired = GENERAL_SETTINGS_DAG_BRIGHTNESS;
+    nightThemeActive = false;
+  }
+  else if (brightnessMode == BRIGHTNESS_NIGHT)
+  {
+    desired = GENERAL_SETTINGS_NACHT_BRIGHTNESS;
+    nightThemeActive = true;
+  }
+  else
+  {
+    bool lowSolar = (solarWatts < 80.0F);
+    nightThemeActive = nightByClock || lowSolar;
+    if (nightByClock)
+      desired = GENERAL_SETTINGS_NACHT_BRIGHTNESS;
+    else if (lowSolar)
+      desired = (GENERAL_SETTINGS_DAG_BRIGHTNESS + GENERAL_SETTINGS_NACHT_BRIGHTNESS) / 2;
+    else
+      desired = GENERAL_SETTINGS_DAG_BRIGHTNESS;
   }
 
   if (desired != currentBrightness)
@@ -566,6 +724,7 @@ void UpdateBrightness()
     currentBrightness = desired;
     if (theDisplayIsCurrentlyOn)
       amoled.setBrightness((uint8_t)currentBrightness);
+    displayDirty = true;
   }
 }
 
@@ -947,11 +1106,12 @@ void DrawStatusBar()
   DisableBox(pageDetailBox);
   DisableBox(pageSystemBox);
   DisableBox(lockBox);
+  DisableBox(brightnessModeBox);
 
   if (!GENERAL_SETTINGS_TOON_STATUSBALK)
     return;
 
-  sprite.fillRect(0, 0, TFT_WIDTH, 24, TFT_BLACK);
+  sprite.fillRect(0, 0, TFT_WIDTH, 24, AppBackgroundColor());
   sprite.drawFastHLine(0, 23, TFT_WIDTH, TFT_DARKGREY);
 
   int badgeX = 6;
@@ -963,15 +1123,15 @@ void DrawStatusBar()
   badgeX += 42;
 
   sprite.setTextDatum(TL_DATUM);
-  sprite.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  sprite.setTextColor(TFT_LIGHTGREY, AppBackgroundColor());
   sprite.setTextFont(2);
   sprite.drawString(CurrentTimeString(), badgeX, 5);
   sprite.drawString(StatusAgeText(), badgeX + 52, 5);
 
-  const int tabW = 52;
+  const int tabW = 46;
   const int gap = 3;
   const int tabY = 3;
-  int visibleTabs = 2 + (GENERAL_SETTINGS_TOON_DETAIL_PAGINA ? 1 : 0) + (GENERAL_SETTINGS_TOON_SYSTEEM_PAGINA ? 1 : 0);
+  int visibleTabs = 3 + (GENERAL_SETTINGS_TOON_DETAIL_PAGINA ? 1 : 0) + (GENERAL_SETTINGS_TOON_SYSTEEM_PAGINA ? 1 : 0);
   int x = TFT_WIDTH - (visibleTabs * tabW + (visibleTabs - 1) * gap) - 4;
 
   DrawButtonBox(x, tabY, tabW, 18, "Over", currentPage == PAGE_OVERVIEW ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageOverviewBox);
@@ -986,6 +1146,8 @@ void DrawStatusBar()
     DrawButtonBox(x, tabY, tabW, 18, "Sys", currentPage == PAGE_SYSTEM ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &pageSystemBox);
     x += tabW + gap;
   }
+  DrawButtonBox(x, tabY, tabW, 18, BrightnessModeLabel(), nightThemeActive ? TFT_NAVY : TFT_DARKGREY, TFT_WHITE, false, &brightnessModeBox);
+  x += tabW + gap;
   DrawButtonBox(x, tabY, tabW, 18, touchLocked ? "Lock" : "Open", touchLocked ? TFT_RED : TFT_DARKGREY, TFT_WHITE, false, &lockBox);
 }
 
@@ -1063,9 +1225,11 @@ void DrawOverviewPage()
     DrawSparkline(batteryPowerHistory, batteryColor, sparkX + 6, sparkY + 4, 128, 20, true);
   }
 
+  DrawEnergyFlowSummary(TFT_HEIGHT - 74);
+
   if (pendingAction)
   {
-    sprite.setTextColor(TFT_ORANGE, TFT_BLACK);
+    sprite.setTextColor(TFT_ORANGE, AppBackgroundColor());
     sprite.setTextFont(2);
     sprite.drawString(pendingActionLabel, centerX, TFT_HEIGHT - 52);
   }
@@ -1074,22 +1238,32 @@ void DrawOverviewPage()
 void DrawDetailPage()
 {
   int y = GENERAL_SETTINGS_TOON_STATUSBALK ? 30 : 8;
+  DisableBox(detailRange1hBox);
+  DisableBox(detailRange24hBox);
+  DisableBox(detailRange7dBox);
+
+  HistorySeries &series = CurrentHistorySeries();
+
   sprite.setTextDatum(TL_DATUM);
-  sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+  sprite.setTextColor(TFT_WHITE, AppBackgroundColor());
   sprite.setTextFont(2);
-  sprite.drawString("Grafieken laatste minuten", 8, y);
+  sprite.drawString("Grafieken", 8, y);
+  DrawButtonBox(110, y - 2, 52, 18, "1u", selectedHistoryRange == HISTORY_RANGE_1H ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &detailRange1hBox);
+  DrawButtonBox(166, y - 2, 52, 18, "24u", selectedHistoryRange == HISTORY_RANGE_24H ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &detailRange24hBox);
+  DrawButtonBox(222, y - 2, 52, 18, "7d", selectedHistoryRange == HISTORY_RANGE_7D ? TFT_BLUE : TFT_BLACK, TFT_WHITE, false, &detailRange7dBox);
+  sprite.drawString(String("Range: ") + HistoryRangeLabel(selectedHistoryRange), 282, y);
 
   DrawMetricCard(8, y + 18, 250, 54, "Net", FormatWatts(dispGridWatts), TFT_CYAN, fabsf(dispGridWatts) > 30.0F);
-  DrawSparkline(gridHistory, TFT_CYAN, 16, y + 54, 234, 12);
+  DrawSparkline(series.grid, TFT_CYAN, 16, y + 54, 234, 12, false, series.size, series.index, series.wrapped);
   DrawMetricCard(278, y + 18, 250, 54, "Zon", FormatWatts(dispSolarWatts), TFT_YELLOW, dispSolarWatts > 30.0F);
-  DrawSparkline(solarHistory, TFT_YELLOW, 286, y + 54, 234, 12);
+  DrawSparkline(series.solar, TFT_YELLOW, 286, y + 54, 234, 12, false, series.size, series.index, series.wrapped);
 
   DrawMetricCard(8, y + 84, 250, 54, "AC-belasting", FormatWatts(dispACLoadWatts), TFT_SILVER, dispACLoadWatts > 50.0F);
-  DrawSparkline(loadHistory, TFT_SILVER, 16, y + 120, 234, 12);
+  DrawSparkline(series.load, TFT_SILVER, 16, y + 120, 234, 12, false, series.size, series.index, series.wrapped);
   DrawMetricCard(278, y + 84, 250, 54, "Accu verm.", FormatWatts(dispBatteryPower), TFT_ORANGE, fabsf(dispBatteryPower) > 25.0F);
-  DrawSparkline(batteryPowerHistory, TFT_ORANGE, 286, y + 120, 234, 12, true);
+  DrawSparkline(series.battery, TFT_ORANGE, 286, y + 120, 234, 12, true, series.size, series.index, series.wrapped);
 
-  sprite.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  sprite.setTextColor(TFT_LIGHTGREY, AppBackgroundColor());
   sprite.setTextFont(2);
   sprite.drawString("Modus: " + ModeToDutch(currentMultiplusMode == Unknown ? lastKnownMultiplusMode : currentMultiplusMode), 10, y + 146);
   sprite.drawString("Laadstatus: " + chargingState + "    Laatste update: " + StatusAgeText(), 10, y + 166);
@@ -1102,7 +1276,7 @@ void DrawSystemPage()
   int y = GENERAL_SETTINGS_TOON_STATUSBALK ? 30 : 8;
   int line = 18;
   sprite.setTextDatum(TL_DATUM);
-  sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+  sprite.setTextColor(TFT_WHITE, AppBackgroundColor());
   sprite.setTextFont(2);
 
   sprite.drawString(programName, 8, y); y += line;
@@ -1111,6 +1285,8 @@ void DrawSystemPage()
   sprite.drawString(String("Touch slot: ") + (touchLocked ? "AAN" : "UIT"), 8, y); y += line;
   sprite.drawString(String("Direct schakelen: ") + (GENERAL_SETTINGS_DIRECT_SCHAKELEN ? "ja" : "nee"), 8, y); y += line;
   sprite.drawString(String("Bevestiging popup: ") + (GENERAL_SETTINGS_TOON_BEVESTIGING_POPUP ? "ja" : "nee"), 8, y); y += line;
+  sprite.drawString("Brightness modus: " + BrightnessModeLabel(), 8, y); y += line;
+  sprite.drawString(String("Nachtthema: ") + (nightThemeActive ? "AAN" : "UIT"), 8, y); y += line;
   sprite.drawString("Helderheid: " + String(currentBrightness), 8, y); y += line;
   sprite.drawString("WiFi: " + String(client.isWifiConnected() ? "verbonden" : "niet verbonden"), 8, y); y += line;
   sprite.drawString("MQTT: " + String(client.isMqttConnected() ? "verbonden" : "niet verbonden"), 8, y); y += line;
@@ -1151,8 +1327,9 @@ void DrawToast()
     return;
 
   int h = 22;
-  sprite.fillRect(0, TFT_HEIGHT - h, TFT_WIDTH, h, TFT_NAVY);
-  sprite.setTextColor(TFT_WHITE, TFT_NAVY);
+  uint16_t toastBg = nightThemeActive ? TFT_DARKGREY : TFT_NAVY;
+  sprite.fillRect(0, TFT_HEIGHT - h, TFT_WIDTH, h, toastBg);
+  sprite.setTextColor(TFT_WHITE, toastBg);
   sprite.setTextDatum(MC_DATUM);
   sprite.setTextFont(2);
   sprite.drawString(toastMessage, TFT_WIDTH / 2, TFT_HEIGHT - 11);
@@ -1185,12 +1362,15 @@ void UpdateDisplay()
   }
   displayDirty = false;
 
-  sprite.fillSprite(TFT_BLACK);
+  sprite.fillSprite(AppBackgroundColor());
   DisableBox(chargerTouchBox);
   DisableBox(inverterTouchBox);
   DisableBox(dialogYesBox);
   DisableBox(dialogNoBox);
   DisableBox(dialogCancelBox);
+  DisableBox(detailRange1hBox);
+  DisableBox(detailRange24hBox);
+  DisableBox(detailRange7dBox);
 
   DrawStatusBar();
 
@@ -1348,6 +1528,45 @@ void ProcessTap(int16_t tx, int16_t ty)
     displayDirty = true;
     return;
   }
+  if (PointInTouchBox(tx, ty, brightnessModeBox))
+  {
+    RememberTouchedBox(brightnessModeBox);
+    if (brightnessMode == BRIGHTNESS_AUTO)
+      brightnessMode = BRIGHTNESS_DAY;
+    else if (brightnessMode == BRIGHTNESS_DAY)
+      brightnessMode = BRIGHTNESS_NIGHT;
+    else
+      brightnessMode = BRIGHTNESS_AUTO;
+    UpdateBrightness();
+    SetToast(String("Brightness: ") + BrightnessModeLabel(), 1200);
+    displayDirty = true;
+    return;
+  }
+
+  if (currentPage == PAGE_DETAIL)
+  {
+    if (PointInTouchBox(tx, ty, detailRange1hBox))
+    {
+      RememberTouchedBox(detailRange1hBox);
+      selectedHistoryRange = HISTORY_RANGE_1H;
+      displayDirty = true;
+      return;
+    }
+    if (PointInTouchBox(tx, ty, detailRange24hBox))
+    {
+      RememberTouchedBox(detailRange24hBox);
+      selectedHistoryRange = HISTORY_RANGE_24H;
+      displayDirty = true;
+      return;
+    }
+    if (PointInTouchBox(tx, ty, detailRange7dBox))
+    {
+      RememberTouchedBox(detailRange7dBox);
+      selectedHistoryRange = HISTORY_RANGE_7D;
+      displayDirty = true;
+      return;
+    }
+  }
 
   if (touchLocked)
   {
@@ -1427,6 +1646,21 @@ void SetupDisplay()
   SetTheDisplayOn(true);
 }
 
+void SetupHistoryBuffers()
+{
+  history1h.size = 60;
+  history1h.intervalMs = 60000UL;
+  history1h.lastSample = millis();
+
+  history24h.size = 96;
+  history24h.intervalMs = 15UL * 60000UL;
+  history24h.lastSample = millis();
+
+  history7d.size = 84;
+  history7d.intervalMs = 2UL * 60UL * 60000UL;
+  history7d.lastSample = millis();
+}
+
 void setup()
 {
   if (generalDebugOutput)
@@ -1434,6 +1668,7 @@ void setup()
 
   SetupTopAndBottomButtons();
   SetupDisplay();
+  SetupHistoryBuffers();
 
   if (VictronInstallationID != "+")
     installationDiscovered = true;
