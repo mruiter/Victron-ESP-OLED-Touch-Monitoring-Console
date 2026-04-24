@@ -16,6 +16,17 @@
 #define GENERAL_SETTINGS_BUTTON_COOLDOWN_MS                             350
 
 #define GENERAL_SETTINGS_SHOW_ADDITIONAL_INFO                           true
+#define GENERAL_SETTINGS_DEFAULT_LANGUAGE                             0
+// 0 = English
+// 1 = Nederlands
+// 2 = Deutsch
+// 3 = Français
+// 4 = Español
+// 5 = Italiano
+// 6 = Polski
+// 7 = العربية
+// 8 = Türkçe
+
 #define GENERAL_SETTINGS_GROTE_NEDERLANDSE_LABELS                       true
 #define GENERAL_SETTINGS_GROTE_STATUSREGELS                             true
 
