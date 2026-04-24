@@ -9,6 +9,7 @@
 #include <LilyGo_AMOLED.h>
 #include <TFT_eSPI.h>
 #include <math.h>
+#include "boot_animation.h"
 
 #define TFT_WIDTH 536
 #define TFT_HEIGHT 240
@@ -1715,6 +1716,7 @@ void setup()
 
   SetupTopAndBottomButtons();
   SetupDisplay();
+  RunPremiumBootAnimation();
   SetupHistoryBuffers();
 
   if (VictronInstallationID != "+")
