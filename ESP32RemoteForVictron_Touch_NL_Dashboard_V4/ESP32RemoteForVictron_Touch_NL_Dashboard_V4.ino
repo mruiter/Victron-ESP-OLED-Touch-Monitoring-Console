@@ -16,8 +16,8 @@
 #define topButtonIfUSBIsOnTheLeft 21
 #define bottomButtonIfUSBIsOnTheLeft 0
 
-const String programName = "ESP32 Remote voor Victron";
-const String programVersion = "Touch NL dashboard v4";
+const char *programName = "ESP32 Remote voor Victron";
+const char *programVersion = "Touch NL dashboard v4";
 
 LilyGo_Class amoled;
 TFT_eSPI tft = TFT_eSPI();
@@ -174,6 +174,9 @@ TouchBox dialogCancelBox = {0, 0, 0, 0, false};
 TouchBox lastTouchedBox = {0, 0, 0, 0, false};
 
 bool pendingAction = false;
+bool displayDirty = true;
+unsigned long lastStatusSecondRendered = 0UL;
+bool statusSecondInitialized = false;
 
 void DebugPrint(const String &msg)
 {
@@ -307,6 +310,7 @@ void SetToast(const String &msg, unsigned long durationMs = 2000)
 {
   toastMessage = msg;
   toastUntil = millis() + durationMs;
+  displayDirty = true;
   DebugPrint(msg);
 }
 
@@ -333,16 +337,32 @@ float PulseFactor(unsigned long speedMs = 900UL)
   return (sinf((float)(millis() % speedMs) / (float)speedMs * 6.2831853F) + 1.0F) * 0.5F;
 }
 
-void UpdateAnimatedValues()
+bool UpdateAnimatedValues()
 {
+  bool changed = false;
   float totalGridWatts = gridInL1Watts + gridInL2Watts + gridInL3Watts;
   float totalLoadWatts = ACOutL1Watts + ACOutL2Watts + ACOutL3Watts;
-  dispGridWatts = SmoothTowards(dispGridWatts, totalGridWatts);
-  dispSolarWatts = SmoothTowards(dispSolarWatts, solarWatts);
-  dispBatterySOC = SmoothTowards(dispBatterySOC, batterySOC, 0.12F);
-  dispBatteryPower = SmoothTowards(dispBatteryPower, batteryPower);
-  dispACLoadWatts = SmoothTowards(dispACLoadWatts, totalLoadWatts);
-  dispBatteryTTG = SmoothTowards(dispBatteryTTG, batteryTTG, 0.08F);
+  float nextGrid = SmoothTowards(dispGridWatts, totalGridWatts);
+  float nextSolar = SmoothTowards(dispSolarWatts, solarWatts);
+  float nextSoc = SmoothTowards(dispBatterySOC, batterySOC, 0.12F);
+  float nextBatteryPower = SmoothTowards(dispBatteryPower, batteryPower);
+  float nextLoad = SmoothTowards(dispACLoadWatts, totalLoadWatts);
+  float nextTTG = SmoothTowards(dispBatteryTTG, batteryTTG, 0.08F);
+
+  changed = changed || fabsf(nextGrid - dispGridWatts) > 0.25F;
+  changed = changed || fabsf(nextSolar - dispSolarWatts) > 0.25F;
+  changed = changed || fabsf(nextSoc - dispBatterySOC) > 0.05F;
+  changed = changed || fabsf(nextBatteryPower - dispBatteryPower) > 0.25F;
+  changed = changed || fabsf(nextLoad - dispACLoadWatts) > 0.25F;
+  changed = changed || fabsf(nextTTG - dispBatteryTTG) > 1.0F;
+
+  dispGridWatts = nextGrid;
+  dispSolarWatts = nextSolar;
+  dispBatterySOC = nextSoc;
+  dispBatteryPower = nextBatteryPower;
+  dispACLoadWatts = nextLoad;
+  dispBatteryTTG = nextTTG;
+  return changed;
 }
 
 void SampleHistoryIfNeeded()
@@ -463,6 +483,7 @@ void SetupTopAndBottomButtons()
 void SetTheDisplayOn(bool on)
 {
   theDisplayIsCurrentlyOn = on;
+  displayDirty = true;
   if (!on)
   {
     amoled.setBrightness(0);
@@ -640,11 +661,13 @@ void StartToggleRequest(multiplusFunction option)
   }
 
   dialogState = DIALOG_CONFIRM;
+  displayDirty = true;
 }
 
 void CancelDialog()
 {
   dialogState = DIALOG_NONE;
+  displayDirty = true;
   DisableBox(dialogYesBox);
   DisableBox(dialogNoBox);
   DisableBox(dialogCancelBox);
@@ -653,6 +676,7 @@ void CancelDialog()
 void ConfirmDialog()
 {
   dialogState = DIALOG_NONE;
+  displayDirty = true;
   ApplyMultiplusMode(ComputeDesiredMode(pendingFunction));
 }
 
@@ -701,6 +725,7 @@ void SubscribeToChargingState()
                      default: chargingState = "Onbekend"; break;
                      }
                      lastMQTTUpdateReceived = millis();
+                     displayDirty = true;
                    });
   solarStateSubscribed = true;
 }
@@ -799,6 +824,7 @@ void SubscribeToCoreTopics()
     }
     expectedMultiplusMode = Unknown;
     lastMQTTUpdateReceived = millis();
+    displayDirty = true;
   });
 
   SubscribeToChargingState();
@@ -1137,9 +1163,27 @@ void UpdateDisplay()
   if (!theDisplayIsCurrentlyOn)
     return;
 
-  if (millis() - lastDisplayUpdate < (unsigned long)GENERAL_SETTINGS_SECONDS_BETWEEN_DISPLAY_UPDATES * 1000UL)
+  unsigned long now = millis();
+  unsigned long statusAgeSeconds = (lastMQTTUpdateReceived == 0) ? 0UL : ((now - lastMQTTUpdateReceived) / 1000UL);
+  bool statusSecondChanged = (!statusSecondInitialized || statusAgeSeconds != lastStatusSecondRendered);
+  bool toastActive = (toastUntil != 0 && now <= toastUntil);
+  bool touchFeedbackActive = GENERAL_SETTINGS_TOON_TOUCH_FEEDBACK && now < activeTouchUntil;
+  bool dialogVisible = (dialogState == DIALOG_CONFIRM);
+  bool pendingVisible = pendingAction;
+  bool animationActive = (GENERAL_SETTINGS_ENABLE_FLOW_ANIMATIE && currentPage == PAGE_OVERVIEW) || touchFeedbackActive || dialogVisible || pendingVisible || toastActive;
+  unsigned long minIntervalMs = animationActive ? 120UL : (unsigned long)GENERAL_SETTINGS_SECONDS_BETWEEN_DISPLAY_UPDATES * 1000UL;
+  if (!displayDirty && !statusSecondChanged)
     return;
-  lastDisplayUpdate = millis();
+
+  if (now - lastDisplayUpdate < minIntervalMs)
+    return;
+  lastDisplayUpdate = now;
+  if (statusSecondChanged)
+  {
+    statusSecondInitialized = true;
+    lastStatusSecondRendered = statusAgeSeconds;
+  }
+  displayDirty = false;
 
   sprite.fillSprite(TFT_BLACK);
   DisableBox(chargerTouchBox);
@@ -1279,18 +1323,21 @@ void ProcessTap(int16_t tx, int16_t ty)
   {
     RememberTouchedBox(pageOverviewBox);
     currentPage = PAGE_OVERVIEW;
+    displayDirty = true;
     return;
   }
   if (PointInTouchBox(tx, ty, pageDetailBox))
   {
     RememberTouchedBox(pageDetailBox);
     currentPage = PAGE_DETAIL;
+    displayDirty = true;
     return;
   }
   if (PointInTouchBox(tx, ty, pageSystemBox))
   {
     RememberTouchedBox(pageSystemBox);
     currentPage = PAGE_SYSTEM;
+    displayDirty = true;
     return;
   }
   if (PointInTouchBox(tx, ty, lockBox))
@@ -1298,6 +1345,7 @@ void ProcessTap(int16_t tx, int16_t ty)
     RememberTouchedBox(lockBox);
     touchLocked = !touchLocked;
     SetToast(touchLocked ? "Touch vergrendeld" : "Touch ontgrendeld", 1500);
+    displayDirty = true;
     return;
   }
 
@@ -1351,6 +1399,7 @@ void onConnectionEstablished()
 {
   subscriptionsReady = false;
   solarStateSubscribed = false;
+  displayDirty = true;
   if (VictronInstallationID != "+")
     installationDiscovered = true;
   if (MultiplusThreeDigitID != "+")
@@ -1391,16 +1440,20 @@ void setup()
   if (MultiplusThreeDigitID != "+")
     multiplusDiscovered = true;
 
-  DebugPrint(programName + " - " + programVersion);
+  DebugPrint(String(programName) + " - " + String(programVersion));
+  displayDirty = true;
 }
 
 void loop()
 {
+  bool animatedChanged = false;
   client.loop();
   PublishKeepAlive();
   SyncTimeIfNeeded();
   UpdateBrightness();
-  UpdateAnimatedValues();
+  animatedChanged = UpdateAnimatedValues();
+  if (animatedChanged)
+    displayDirty = true;
   SampleHistoryIfNeeded();
 
   if (!subscriptionsReady)
@@ -1424,6 +1477,7 @@ void loop()
   {
     toastUntil = 0;
     toastMessage = "";
+    displayDirty = true;
   }
 
   UpdateDisplay();
