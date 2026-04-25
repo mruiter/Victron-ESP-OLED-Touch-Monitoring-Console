@@ -12,10 +12,8 @@ ARDUINO_LIBRARY_INDEX_URL="https://downloads.arduino.cc/libraries/library_index.
 
 mkdir -p "${BIN_DIR}" "${ARDUINO_DATA_DIR}" "${ARDUINO_DOWNLOADS_DIR}" "${ARDUINO_USER_DIR}"
 
-if [[ ! -x "${BIN_DIR}/arduino-cli" ]]; then
-  echo "Installing arduino-cli into ${BIN_DIR} ..."
-  curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR="${BIN_DIR}" sh
-fi
+"${ROOT_DIR}/scripts/install_arduino_cli.sh"
+
 
 check_url_reachable() {
   local url="$1"
