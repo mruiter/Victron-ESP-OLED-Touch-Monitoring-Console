@@ -52,13 +52,16 @@ Snelle codegids (voor makkelijk terugvinden):
   - Opstartanimatie en visuele onboarding.
 
 CLI testen in deze omgeving (zonder Arduino IDE):
-1. Installeer Arduino CLI + ESP32 core + libraries:
+1. Alleen Arduino CLI lokaal installeren in de repository:
+   - `./scripts/install_arduino_cli.sh`
+2. Volledige setup (CLI + ESP32 core + libraries):
    - `./scripts/setup_arduino_cli.sh`
-2. Compile test draaien:
+3. Compile test draaien:
    - `./scripts/test_compile.sh`
 
 Wat dit doet:
 - Installeert `arduino-cli` lokaal in `.arduino/bin` (repo-lokaal, geen systeempakket nodig).
+- Gebruikt repo-lokale datafolders: `.arduino/data`, `.arduino/downloads`, `.arduino/user`.
 - Zet de ESP32 board index aan en installeert `esp32:esp32`.
 - Installeert de gebruikte libraries (TFT_eSPI, EspMQTTClient, ArduinoJson en LilyGo AMOLED Series via GitHub).
 - Draait een compile check voor `esp32:esp32:esp32s3`.
