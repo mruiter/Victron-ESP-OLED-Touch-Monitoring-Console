@@ -1955,7 +1955,18 @@ void onConnectionEstablished()
 
 void SetupDisplay()
 {
-  sprite.createSprite(TFT_WIDTH, TFT_HEIGHT);
+  tft.init();
+  SetDisplayOrientation();
+
+  if (sprite.createSprite(TFT_WIDTH, TFT_HEIGHT) == nullptr)
+  {
+    DebugPrint("Sprite allocation failed (full-screen framebuffer); display updates disabled");
+    tft.fillScreen(TFT_RED);
+    tft.setTextColor(TFT_WHITE, TFT_RED);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("Display buffer allocatie mislukt", TFT_WIDTH / 2, TFT_HEIGHT / 2);
+    return;
+  }
   sprite.setSwapBytes(true);
 
   swipeFromFrame = (uint16_t *)malloc(FRAMEBUFFER_BYTES);
@@ -1983,9 +1994,6 @@ void SetupDisplay()
     swipeToFrame = nullptr;
     DebugPrint("Swipe anim buffers unavailable, fallback to instant page switch");
   }
-
-  tft.init();
-  SetDisplayOrientation();
 
   ledcSetup(kBacklightPwmChannel, 12000, 8);
   ledcAttachPin(GENERAL_SETTINGS_BACKLIGHT_PIN, kBacklightPwmChannel);
