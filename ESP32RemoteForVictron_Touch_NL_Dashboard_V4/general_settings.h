@@ -15,6 +15,11 @@
 #define GENERAL_SETTINGS_TOUCH_FEEDBACK_MS                              180
 #define GENERAL_SETTINGS_BUTTON_COOLDOWN_MS                             350
 
+// Waveshare ESP-S3-Touch-AMOLED-1.91 hardware mapping
+#define GENERAL_SETTINGS_BACKLIGHT_PIN                                38
+#define GENERAL_SETTINGS_TOP_BUTTON_PIN                               -1
+#define GENERAL_SETTINGS_BOTTOM_BUTTON_PIN                            -1
+
 #define GENERAL_SETTINGS_SHOW_ADDITIONAL_INFO                           true
 #define GENERAL_SETTINGS_DEFAULT_LANGUAGE                             0
 // 0 = English

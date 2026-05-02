@@ -6,7 +6,6 @@
 #include <time.h>
 #include <ArduinoJson.h>
 #include <EspMQTTClient.h>
-#include <LilyGo_AMOLED.h>
 #include <TFT_eSPI.h>
 #include <math.h>
 #include <string.h>
@@ -16,8 +15,6 @@
 #define TFT_WIDTH 536
 #define TFT_HEIGHT 240
 
-#define topButtonIfUSBIsOnTheLeft 21
-#define bottomButtonIfUSBIsOnTheLeft 0
 
 // -----------------------------------------------------------------------------
 // App metadata and hardware globals
@@ -25,7 +22,6 @@
 const char *programName = "ESP32 Remote for Victron";
 const char *programVersion = "Touch dashboard v4";
 
-LilyGo_Class amoled;
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite sprite = TFT_eSprite(&tft);
 
@@ -276,7 +272,7 @@ String ChargingStateFromCode(int stateCode)
 
 void RefreshDisplay()
 {
-  amoled.pushColors(0, 0, TFT_WIDTH, TFT_HEIGHT, (uint16_t *)sprite.getPointer());
+  tft.pushImage(0, 0, TFT_WIDTH, TFT_HEIGHT, (uint16_t *)sprite.getPointer());
 }
 
 void QueueBootCrossfadeFromCurrentFrame()
@@ -814,26 +810,18 @@ void DrawEnergyFlowSummary(int y)
 void SetDisplayOrientation()
 {
   if (GENERAL_SETTINGS_USB_ON_THE_LEFT)
-    amoled.setRotation(3);
+    tft.setRotation(3);
   else
-    amoled.setRotation(1);
+    tft.setRotation(1);
 }
 
 void SetupTopAndBottomButtons()
 {
-  pinMode(topButtonIfUSBIsOnTheLeft, INPUT);
-  pinMode(bottomButtonIfUSBIsOnTheLeft, INPUT);
+  topButton = GENERAL_SETTINGS_TOP_BUTTON_PIN;
+  bottomButton = GENERAL_SETTINGS_BOTTOM_BUTTON_PIN;
 
-  if (GENERAL_SETTINGS_USB_ON_THE_LEFT)
-  {
-    topButton = bottomButtonIfUSBIsOnTheLeft;
-    bottomButton = topButtonIfUSBIsOnTheLeft;
-  }
-  else
-  {
-    topButton = topButtonIfUSBIsOnTheLeft;
-    bottomButton = bottomButtonIfUSBIsOnTheLeft;
-  }
+  if (topButton >= 0) pinMode(topButton, INPUT_PULLUP);
+  if (bottomButton >= 0) pinMode(bottomButton, INPUT_PULLUP);
 }
 
 void SetTheDisplayOn(bool on)
@@ -842,13 +830,13 @@ void SetTheDisplayOn(bool on)
   displayDirty = true;
   if (!on)
   {
-    amoled.setBrightness(0);
+    ledcWrite(0, 0);
     sprite.fillSprite(TFT_BLACK);
     RefreshDisplay();
   }
   else
   {
-    amoled.setBrightness((uint8_t)currentBrightness);
+    ledcWrite(0, currentBrightness);
     ResetKeepDisplayOnStartTime();
   }
 }
@@ -954,7 +942,7 @@ void UpdateBrightness()
   {
     currentBrightness = desired;
     if (theDisplayIsCurrentlyOn)
-      amoled.setBrightness((uint8_t)currentBrightness);
+      ledcWrite(0, currentBrightness);
     displayDirty = true;
   }
 }
@@ -1701,7 +1689,7 @@ void CheckButtons()
 
   if (!theDisplayIsCurrentlyOn)
   {
-    if (digitalRead(topButton) == 0 || digitalRead(bottomButton) == 0)
+    if ((topButton >= 0 && digitalRead(topButton) == 0) || (bottomButton >= 0 && digitalRead(bottomButton) == 0))
     {
       SetTheDisplayOn(true);
       SetKeepDisplayOnTimeOut(GENERAL_SETTINGS_DISPLAY_TIMEOUT_MINUTEN);
@@ -1712,12 +1700,12 @@ void CheckButtons()
   if (millis() - lastButtonAction < GENERAL_SETTINGS_BUTTON_COOLDOWN_MS)
     return;
 
-  if (digitalRead(topButton) == 0)
+  if (topButton >= 0 && digitalRead(topButton) == 0)
   {
     HandleButtonAction(Charger);
     lastButtonAction = millis();
   }
-  else if (digitalRead(bottomButton) == 0)
+  else if (bottomButton >= 0 && digitalRead(bottomButton) == 0)
   {
     HandleButtonAction(Inverter);
     lastButtonAction = millis();
@@ -1936,7 +1924,7 @@ void CheckTouch()
 
   int16_t tx = 0;
   int16_t ty = 0;
-  bool touched = amoled.getPoint(&tx, &ty) > 0;
+  bool touched = tft.getTouch(&tx, &ty);
 
   if (touched)
   {
@@ -2008,17 +1996,14 @@ void SetupDisplay()
     DebugPrint("Swipe anim buffers unavailable, fallback to instant page switch");
   }
 
-  bool ok = amoled.beginAMOLED_191(true);
-  if (!ok)
-  {
-    DebugPrint("AMOLED init failed");
-    while (true)
-      delay(1000);
-  }
-
-  boardHasTouch = amoled.hasTouch();
+  tft.init();
   SetDisplayOrientation();
-  amoled.setBrightness((uint8_t)currentBrightness);
+
+  ledcSetup(0, 12000, 8);
+  ledcAttachPin(GENERAL_SETTINGS_BACKLIGHT_PIN, 0);
+  ledcWrite(0, currentBrightness);
+
+  boardHasTouch = GENERAL_SETTINGS_USE_TOUCH_DISPLAY;
   SetKeepDisplayOnTimeOut(GENERAL_SETTINGS_DISPLAY_TIMEOUT_MINUTEN);
   SetTheDisplayOn(true);
 }
