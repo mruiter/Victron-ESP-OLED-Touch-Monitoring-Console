@@ -15,6 +15,31 @@
 #define TFT_WIDTH 536
 #define TFT_HEIGHT 240
 
+#ifndef ledcAttachPin
+static const uint8_t kBacklightPwmChannel = 0;
+static inline uint32_t ledcSetup(uint8_t channel, uint32_t freq, uint8_t resolution_bits)
+{
+  (void)channel;
+  return ledcAttach(GENERAL_SETTINGS_BACKLIGHT_PIN, freq, resolution_bits) ? freq : 0UL;
+}
+static inline void ledcAttachPin(uint8_t pin, uint8_t channel)
+{
+  (void)pin;
+  (void)channel;
+}
+static inline bool WriteBacklightPwm(uint32_t duty)
+{
+  return ledcWrite(GENERAL_SETTINGS_BACKLIGHT_PIN, duty);
+}
+#else
+static const uint8_t kBacklightPwmChannel = 0;
+static inline bool WriteBacklightPwm(uint32_t duty)
+{
+  ledcWrite(kBacklightPwmChannel, duty);
+  return true;
+}
+#endif
+
 
 // -----------------------------------------------------------------------------
 // App metadata and hardware globals
@@ -830,13 +855,13 @@ void SetTheDisplayOn(bool on)
   displayDirty = true;
   if (!on)
   {
-    ledcWrite(0, 0);
+    WriteBacklightPwm(0);
     sprite.fillSprite(TFT_BLACK);
     RefreshDisplay();
   }
   else
   {
-    ledcWrite(0, currentBrightness);
+    WriteBacklightPwm(currentBrightness);
     ResetKeepDisplayOnStartTime();
   }
 }
@@ -942,7 +967,7 @@ void UpdateBrightness()
   {
     currentBrightness = desired;
     if (theDisplayIsCurrentlyOn)
-      ledcWrite(0, currentBrightness);
+      WriteBacklightPwm(currentBrightness);
     displayDirty = true;
   }
 }
@@ -1924,7 +1949,10 @@ void CheckTouch()
 
   int16_t tx = 0;
   int16_t ty = 0;
-  bool touched = tft.getTouch(&tx, &ty);
+  bool touched = false;
+#if defined(TOUCH_CS) && (TOUCH_CS >= 0)
+  touched = tft.getTouch(&tx, &ty);
+#endif
 
   if (touched)
   {
@@ -1999,9 +2027,9 @@ void SetupDisplay()
   tft.init();
   SetDisplayOrientation();
 
-  ledcSetup(0, 12000, 8);
-  ledcAttachPin(GENERAL_SETTINGS_BACKLIGHT_PIN, 0);
-  ledcWrite(0, currentBrightness);
+  ledcSetup(kBacklightPwmChannel, 12000, 8);
+  ledcAttachPin(GENERAL_SETTINGS_BACKLIGHT_PIN, kBacklightPwmChannel);
+  WriteBacklightPwm(currentBrightness);
 
   boardHasTouch = GENERAL_SETTINGS_USE_TOUCH_DISPLAY;
   SetKeepDisplayOnTimeOut(GENERAL_SETTINGS_DISPLAY_TIMEOUT_MINUTEN);
