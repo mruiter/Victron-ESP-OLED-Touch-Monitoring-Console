@@ -16,7 +16,29 @@
 #define GENERAL_SETTINGS_BUTTON_COOLDOWN_MS                             350
 
 // Waveshare ESP-S3-Touch-AMOLED-1.91 hardware mapping
-#define GENERAL_SETTINGS_BACKLIGHT_PIN                                38
+// Display QSPI bus pins (for TFT_eSPI/User_Setup reference)
+#define GENERAL_SETTINGS_DISPLAY_QSPI_SCK_PIN                         47
+#define GENERAL_SETTINGS_DISPLAY_QSPI_CS_PIN                          6
+#define GENERAL_SETTINGS_DISPLAY_QSPI_D0_PIN                          18
+#define GENERAL_SETTINGS_DISPLAY_QSPI_D1_PIN                          7
+#define GENERAL_SETTINGS_DISPLAY_QSPI_D2_PIN                          48
+#define GENERAL_SETTINGS_DISPLAY_QSPI_D3_PIN                          5
+
+// Touch I2C + control pins (for touch driver/User_Setup reference)
+#define GENERAL_SETTINGS_TOUCH_I2C_SCL_PIN                            39
+#define GENERAL_SETTINGS_TOUCH_I2C_SDA_PIN                            40
+#define GENERAL_SETTINGS_TOUCH_INT_PIN                                41
+#define GENERAL_SETTINGS_DISPLAY_TE_PIN                               16
+
+// Optional control lines
+#define GENERAL_SETTINGS_BACKLIGHT_PIN                                -1
+#define GENERAL_SETTINGS_BACKLIGHT_ACTIVE_HIGH                        true
+#define GENERAL_SETTINGS_DISPLAY_POWER_PIN                            -1
+#define GENERAL_SETTINGS_DISPLAY_POWER_ACTIVE_HIGH                    true
+#define GENERAL_SETTINGS_DISPLAY_RESET_PIN                            17
+#define GENERAL_SETTINGS_DISPLAY_RESET_ACTIVE_LOW                     true
+
+// Optional physical buttons
 #define GENERAL_SETTINGS_TOP_BUTTON_PIN                               -1
 #define GENERAL_SETTINGS_BOTTOM_BUTTON_PIN                            -1
 

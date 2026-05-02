@@ -223,6 +223,47 @@ unsigned long bootFadeTransitionDurationMs = 420UL;
 // -----------------------------------------------------------------------------
 // Utility helpers
 // -----------------------------------------------------------------------------
+
+uint8_t MapBacklightDuty(uint8_t requested)
+{
+  if (GENERAL_SETTINGS_BACKLIGHT_ACTIVE_HIGH)
+    return requested;
+  return (uint8_t)(255 - requested);
+}
+
+void ResetDisplayPanelIfConfigured()
+{
+  if (GENERAL_SETTINGS_DISPLAY_RESET_PIN < 0)
+    return;
+
+  pinMode(GENERAL_SETTINGS_DISPLAY_RESET_PIN, OUTPUT);
+  uint8_t active = GENERAL_SETTINGS_DISPLAY_RESET_ACTIVE_LOW ? LOW : HIGH;
+  uint8_t inactive = GENERAL_SETTINGS_DISPLAY_RESET_ACTIVE_LOW ? HIGH : LOW;
+  digitalWrite(GENERAL_SETTINGS_DISPLAY_RESET_PIN, inactive);
+  delay(2);
+  digitalWrite(GENERAL_SETTINGS_DISPLAY_RESET_PIN, active);
+  delay(12);
+  digitalWrite(GENERAL_SETTINGS_DISPLAY_RESET_PIN, inactive);
+  delay(120);
+}
+
+void ConfigureDisplayPower()
+{
+  if (GENERAL_SETTINGS_DISPLAY_POWER_PIN < 0)
+    return;
+
+  pinMode(GENERAL_SETTINGS_DISPLAY_POWER_PIN, OUTPUT);
+  digitalWrite(GENERAL_SETTINGS_DISPLAY_POWER_PIN, GENERAL_SETTINGS_DISPLAY_POWER_ACTIVE_HIGH ? HIGH : LOW);
+}
+
+void ApplyBacklight(uint8_t requested)
+{
+  if (GENERAL_SETTINGS_BACKLIGHT_PIN < 0)
+    return;
+
+  WriteBacklightPwm(MapBacklightDuty(requested));
+}
+
 void DebugPrint(const String &msg)
 {
   if (generalDebugOutput)
@@ -815,13 +856,13 @@ void SetTheDisplayOn(bool on)
   displayDirty = true;
   if (!on)
   {
-    WriteBacklightPwm(0);
+    ApplyBacklight(0);
     sprite.fillSprite(TFT_BLACK);
     RefreshDisplay();
   }
   else
   {
-    WriteBacklightPwm(currentBrightness);
+    ApplyBacklight((uint8_t)currentBrightness);
     ResetKeepDisplayOnStartTime();
   }
 }
@@ -927,7 +968,7 @@ void UpdateBrightness()
   {
     currentBrightness = desired;
     if (theDisplayIsCurrentlyOn)
-      WriteBacklightPwm(currentBrightness);
+      ApplyBacklight((uint8_t)currentBrightness);
     displayDirty = true;
   }
 }
@@ -1955,6 +1996,7 @@ void onConnectionEstablished()
 
 void SetupDisplay()
 {
+  ResetDisplayPanelIfConfigured();
   tft.init();
   SetDisplayOrientation();
 
@@ -1995,9 +2037,13 @@ void SetupDisplay()
     DebugPrint("Swipe anim buffers unavailable, fallback to instant page switch");
   }
 
-  ledcSetup(kBacklightPwmChannel, 12000, 8);
-  ledcAttachPin(GENERAL_SETTINGS_BACKLIGHT_PIN, kBacklightPwmChannel);
-  WriteBacklightPwm(currentBrightness);
+  ConfigureDisplayPower();
+  if (GENERAL_SETTINGS_BACKLIGHT_PIN >= 0)
+  {
+    ledcSetup(kBacklightPwmChannel, 12000, 8);
+    ledcAttachPin(GENERAL_SETTINGS_BACKLIGHT_PIN, kBacklightPwmChannel);
+    ApplyBacklight((uint8_t)currentBrightness);
+  }
 
   boardHasTouch = GENERAL_SETTINGS_USE_TOUCH_DISPLAY;
   SetKeepDisplayOnTimeOut(GENERAL_SETTINGS_DISPLAY_TIMEOUT_MINUTEN);
