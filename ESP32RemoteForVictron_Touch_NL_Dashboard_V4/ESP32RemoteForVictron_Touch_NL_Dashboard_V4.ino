@@ -6,7 +6,6 @@
 #include <time.h>
 #include <ArduinoJson.h>
 #include <EspMQTTClient.h>
-#include <LilyGo_AMOLED.h>
 #include <TFT_eSPI.h>
 #include <math.h>
 #include <string.h>
@@ -25,7 +24,6 @@
 const char *programName = "ESP32 Remote for Victron";
 const char *programVersion = "Touch dashboard v4";
 
-LilyGo_Class amoled;
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite sprite = TFT_eSprite(&tft);
 
@@ -240,6 +238,35 @@ bool bootFadeTransitionPending = false;
 unsigned long bootFadeTransitionDurationMs = 420UL;
 
 // -----------------------------------------------------------------------------
+// Board touch abstraction
+// -----------------------------------------------------------------------------
+// Default implementation compiles on setups where TFT_eSPI touch is not enabled.
+// To enable touch, make sure your TFT_eSPI User_Setup for this board exposes
+// getTouch(), then set GENERAL_SETTINGS_TOUCH_AVAILABLE to 1.
+#ifndef GENERAL_SETTINGS_TOUCH_AVAILABLE
+#define GENERAL_SETTINGS_TOUCH_AVAILABLE 0
+#endif
+
+bool ReadBoardTouch(int16_t *x, int16_t *y)
+{
+#if GENERAL_SETTINGS_TOUCH_AVAILABLE
+  uint16_t rawX = 0;
+  uint16_t rawY = 0;
+  bool touched = tft.getTouch(&rawX, &rawY);
+  if (touched)
+  {
+    *x = (int16_t)rawX;
+    *y = (int16_t)rawY;
+  }
+  return touched;
+#else
+  (void)x;
+  (void)y;
+  return false;
+#endif
+}
+
+// -----------------------------------------------------------------------------
 // Utility helpers
 // -----------------------------------------------------------------------------
 void DebugPrint(const String &msg)
@@ -276,7 +303,7 @@ String ChargingStateFromCode(int stateCode)
 
 void RefreshDisplay()
 {
-  amoled.pushColors(0, 0, TFT_WIDTH, TFT_HEIGHT, (uint16_t *)sprite.getPointer());
+  tft.pushImage(0, 0, TFT_WIDTH, TFT_HEIGHT, (uint16_t *)sprite.getPointer());
 }
 
 void QueueBootCrossfadeFromCurrentFrame()
@@ -814,26 +841,16 @@ void DrawEnergyFlowSummary(int y)
 void SetDisplayOrientation()
 {
   if (GENERAL_SETTINGS_USB_ON_THE_LEFT)
-    amoled.setRotation(3);
+    tft.setRotation(3);
   else
-    amoled.setRotation(1);
+    tft.setRotation(1);
 }
 
 void SetupTopAndBottomButtons()
 {
-  pinMode(topButtonIfUSBIsOnTheLeft, INPUT);
-  pinMode(bottomButtonIfUSBIsOnTheLeft, INPUT);
-
-  if (GENERAL_SETTINGS_USB_ON_THE_LEFT)
-  {
-    topButton = bottomButtonIfUSBIsOnTheLeft;
-    bottomButton = topButtonIfUSBIsOnTheLeft;
-  }
-  else
-  {
-    topButton = topButtonIfUSBIsOnTheLeft;
-    bottomButton = bottomButtonIfUSBIsOnTheLeft;
-  }
+  // Waveshare ESP-S3-Touch-AMOLED-1.91 has no compatible LilyGo button mapping.
+  topButton = -1;
+  bottomButton = -1;
 }
 
 void SetTheDisplayOn(bool on)
@@ -842,13 +859,13 @@ void SetTheDisplayOn(bool on)
   displayDirty = true;
   if (!on)
   {
-    amoled.setBrightness(0);
+    tft.writecommand(TFT_DISPOFF);
     sprite.fillSprite(TFT_BLACK);
     RefreshDisplay();
   }
   else
   {
-    amoled.setBrightness((uint8_t)currentBrightness);
+    tft.writecommand(TFT_DISPON);
     ResetKeepDisplayOnStartTime();
   }
 }
@@ -954,7 +971,7 @@ void UpdateBrightness()
   {
     currentBrightness = desired;
     if (theDisplayIsCurrentlyOn)
-      amoled.setBrightness((uint8_t)currentBrightness);
+      // TFT_eSPI has no unified brightness API across boards; keep display on/off only.
     displayDirty = true;
   }
 }
@@ -1698,6 +1715,8 @@ void HandleButtonAction(multiplusFunction option)
 void CheckButtons()
 {
   static unsigned long lastButtonAction = 0UL;
+  if (topButton < 0 || bottomButton < 0)
+    return;
 
   if (!theDisplayIsCurrentlyOn)
   {
@@ -1936,7 +1955,7 @@ void CheckTouch()
 
   int16_t tx = 0;
   int16_t ty = 0;
-  bool touched = amoled.getPoint(&tx, &ty) > 0;
+  bool touched = ReadBoardTouch(&tx, &ty);
 
   if (touched)
   {
@@ -2008,17 +2027,11 @@ void SetupDisplay()
     DebugPrint("Swipe anim buffers unavailable, fallback to instant page switch");
   }
 
-  bool ok = amoled.beginAMOLED_191(true);
-  if (!ok)
-  {
-    DebugPrint("AMOLED init failed");
-    while (true)
-      delay(1000);
-  }
-
-  boardHasTouch = amoled.hasTouch();
+  tft.init();
+  boardHasTouch = (GENERAL_SETTINGS_TOUCH_AVAILABLE == 1);
   SetDisplayOrientation();
-  amoled.setBrightness((uint8_t)currentBrightness);
+  tft.fillScreen(TFT_BLACK);
+  tft.writecommand(TFT_DISPON);
   SetKeepDisplayOnTimeOut(GENERAL_SETTINGS_DISPLAY_TIMEOUT_MINUTEN);
   SetTheDisplayOn(true);
 }

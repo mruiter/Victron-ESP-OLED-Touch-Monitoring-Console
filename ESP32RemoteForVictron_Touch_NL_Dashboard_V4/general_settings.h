@@ -10,6 +10,8 @@
 
 #define GENERAL_SETTINGS_USE_TOUCH_DISPLAY                              true
 #define GENERAL_SETTINGS_WAKE_DISPLAY_ON_TOUCH                          true
+#define GENERAL_SETTINGS_TOUCH_AVAILABLE                                0
+// Zet op 1 wanneer jouw TFT_eSPI User_Setup touch ondersteunt (getTouch()).
 #define GENERAL_SETTINGS_TOUCH_VERGRENDELING_BIJ_START                  false
 #define GENERAL_SETTINGS_TOUCH_COOLDOWN_MS                              500
 #define GENERAL_SETTINGS_TOUCH_FEEDBACK_MS                              180

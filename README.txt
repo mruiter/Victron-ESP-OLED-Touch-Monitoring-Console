@@ -1,6 +1,6 @@
 ESP32RemoteForVictron Touch NL Dashboard V4
 
-Deze versie is een opgeschoonde dashboard-build voor de LilyGo T-Display S3 AMOLED touch.
+Deze versie is aangepast voor de Waveshare ESP-S3-Touch-AMOLED-1.91.
 
 Belangrijkste functies:
 - Nederlandse dashboard UI
@@ -27,8 +27,7 @@ Installatie:
 1. Open ESP32RemoteForVictron_Touch_NL_Dashboard_V4.ino in Arduino IDE.
 2. Vul secret_settings.h in.
 3. Installeer libraries:
-   - LilyGo AMOLED Series
-   - TFT_eSPI
+   - TFT_eSPI (met juiste User_Setup voor Waveshare ESP-S3-Touch-AMOLED-1.91)
    - EspMQTTClient
    - ArduinoJson
 4. Board: ESP32S3 Dev Module, PSRAM OPI PSRAM, USB CDC On Boot Enabled.
@@ -63,5 +62,5 @@ Wat dit doet:
 - Installeert `arduino-cli` lokaal in `.arduino/bin` (repo-lokaal, geen systeempakket nodig).
 - Gebruikt repo-lokale datafolders: `.arduino/data`, `.arduino/downloads`, `.arduino/user`.
 - Zet de ESP32 board index aan en installeert `esp32:esp32`.
-- Installeert de gebruikte libraries (TFT_eSPI, EspMQTTClient, ArduinoJson en LilyGo AMOLED Series via GitHub).
+- Installeert de gebruikte libraries (TFT_eSPI, EspMQTTClient en ArduinoJson).
 - Draait een compile check voor `esp32:esp32:esp32s3`.

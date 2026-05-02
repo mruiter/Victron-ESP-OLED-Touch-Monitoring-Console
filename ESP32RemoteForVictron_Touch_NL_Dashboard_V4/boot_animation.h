@@ -3,7 +3,7 @@
 /*
   Victron ESP OLED Touch Monitoring Console - Premium Boot Animation
   ------------------------------------------------------------------
-  Header-only boot animation for LilyGo AMOLED + TFT_eSPI sprite.
+  Header-only boot animation for TFT_eSPI sprite displays.
 
   Integration in your .ino:
     1) Add below your includes:
@@ -15,7 +15,6 @@
 
   This file expects these globals/functions to exist in the main sketch:
     - TFT_eSprite sprite;
-    - LilyGo_Class amoled;
     - void RefreshDisplay();
     - const char *programVersion;
     - bool client.isWifiConnected()      [optional via BootStatus]
@@ -70,7 +69,6 @@
 #endif
 
 extern TFT_eSprite sprite;
-extern LilyGo_Class amoled;
 extern void RefreshDisplay();
 extern const char *programVersion;
 extern EspMQTTClient client;
