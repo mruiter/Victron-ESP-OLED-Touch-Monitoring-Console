@@ -11,6 +11,7 @@
 #include <string.h>
 #include "boot_animation.h"
 #include "language.h"
+#include "dashboard_types.h"
 
 #define TFT_WIDTH 536
 #define TFT_HEIGHT 240
@@ -125,26 +126,6 @@ int historyIndex = 0;
 bool historyWrapped = false;
 unsigned long lastHistorySample = 0UL;
 
-enum HistoryRange
-{
-  HISTORY_RANGE_1H,
-  HISTORY_RANGE_24H,
-  HISTORY_RANGE_7D
-};
-
-struct HistorySeries
-{
-  float grid[96] = {0};
-  float solar[96] = {0};
-  float load[96] = {0};
-  float battery[96] = {0};
-  int size = 0;
-  int index = 0;
-  bool wrapped = false;
-  unsigned long intervalMs = 60000UL;
-  unsigned long lastSample = 0UL;
-};
-
 HistorySeries history1h;
 HistorySeries history24h;
 HistorySeries history7d;
@@ -182,25 +163,10 @@ String subMultiplusModeTopic;
 String subSolarStateTopic;
 
 
-enum multiplusMode
-{
-  ChargerOnly,
-  InverterOnly,
-  On,
-  Off,
-  Unknown
-};
-
 multiplusMode currentMultiplusMode = Unknown;
 multiplusMode lastKnownMultiplusMode = Unknown;
 multiplusMode expectedMultiplusMode = Unknown;
 
-
-enum multiplusFunction
-{
-  Charger,
-  Inverter
-};
 
 
 enum Page
@@ -221,12 +187,6 @@ enum DialogState
 
 DialogState dialogState = DIALOG_NONE;
 multiplusFunction pendingFunction = Charger;
-
-struct TouchBox
-{
-  int16_t x1, y1, x2, y2;
-  bool enabled;
-};
 
 TouchBox chargerTouchBox = {0, 0, 0, 0, false};
 TouchBox inverterTouchBox = {0, 0, 0, 0, false};
