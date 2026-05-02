@@ -68,5 +68,5 @@ Wat dit doet:
 
 Waveshare port-notes:
 - Display-driver gebruikt nu alleen TFT_eSPI (geen LilyGo_AMOLED afhankelijkheid).
-- Backlight wordt via PWM aangestuurd op GENERAL_SETTINGS_BACKLIGHT_PIN (default GPIO38).
+- Backlight wordt via PWM aangestuurd op GENERAL_SETTINGS_BACKLIGHT_PIN (default GPIO38, active-low op deze Waveshare variant).
 - Fysieke knoppen zijn optioneel; default uit (-1).
