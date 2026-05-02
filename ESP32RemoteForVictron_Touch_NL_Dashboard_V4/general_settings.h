@@ -31,8 +31,8 @@
 #define GENERAL_SETTINGS_DISPLAY_TE_PIN                               16
 
 // Optional control lines
-#define GENERAL_SETTINGS_BACKLIGHT_PIN                                -1
-#define GENERAL_SETTINGS_BACKLIGHT_ACTIVE_HIGH                        true
+#define GENERAL_SETTINGS_BACKLIGHT_PIN                                38
+#define GENERAL_SETTINGS_BACKLIGHT_ACTIVE_HIGH                        false
 #define GENERAL_SETTINGS_DISPLAY_POWER_PIN                            -1
 #define GENERAL_SETTINGS_DISPLAY_POWER_ACTIVE_HIGH                    true
 #define GENERAL_SETTINGS_DISPLAY_RESET_PIN                            17
